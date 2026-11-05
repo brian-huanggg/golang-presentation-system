@@ -20,7 +20,10 @@ const (
 	// keyCredVersion is the user's credential_version when the session was issued
 	// (ADR 0019). A password change moves the user's value on, which kills the session.
 	keyCredVersion = "credVersion"
-	keyCSRF        = platform.CSRFSessionKey // shared with the platform middleware that reads it
+	// keyMustChange mirrors user.must_change_password for the gate (AUTH-008), so the
+	// middleware needs no database read per request.
+	keyMustChange = "mustChange"
+	keyCSRF       = platform.CSRFSessionKey // shared with the platform middleware that reads it
 )
 
 // NewSessionManager builds the scs manager (ADR 0007). The store is injected so

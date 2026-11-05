@@ -77,6 +77,7 @@ func newEnv(t *testing.T, idle, lifetime time.Duration) *env {
 
 	r := gin.New()
 	r.Use(platform.CSRF(sm, quiet())) // as in production: inside LoadAndSave, before the routes
+	r.Use(RequirePasswordChange(sm))
 	r.POST("/api/v1/auth/login", h.Login)
 	r.POST("/api/v1/auth/logout", h.Logout)
 	r.GET("/api/v1/auth/me", h.GetCurrentUser)
@@ -413,6 +414,7 @@ func (o *orderedSessions) Put(_ context.Context, k string, _ any) {
 }
 func (o *orderedSessions) GetInt64(context.Context, string) int64   { return 0 }
 func (o *orderedSessions) GetString(context.Context, string) string { return "" }
+func (o *orderedSessions) GetBool(context.Context, string) bool     { return false }
 func (o *orderedSessions) Token(context.Context) string             { return "" }
 func (o *orderedSessions) Iterate(context.Context, func(context.Context) error) error {
 	return nil
@@ -433,7 +435,7 @@ func TestAUTH_005_LoginRenewsTheTokenBeforeStoringIdentity(t *testing.T) {
 
 	_, err = svc.Login(context.Background(), "123456", loginPassword, "")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"renew", "put:userID", "put:employeeID", "put:role", "put:credVersion", "put:csrfToken"}, ord.calls)
+	assert.Equal(t, []string{"renew", "put:userID", "put:employeeID", "put:role", "put:credVersion", "put:mustChange", "put:csrfToken"}, ord.calls)
 }
 
 type failingAuditor struct{ recorder }

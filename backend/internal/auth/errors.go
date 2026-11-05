@@ -14,6 +14,7 @@ const (
 	CodeInvalidCreds     = "invalid_credentials"
 	CodeUnauthenticated  = "unauthenticated"
 	CodeConflict         = "conflict"
+	CodePasswordChange   = "password_change_required"
 )
 
 // ErrValidation is a 400 carrying one entry per invalid field.
@@ -48,4 +49,10 @@ func ErrUnauthenticated() *platform.Problem {
 // ErrCredentialsConflict is a 409 for a password change that lost a race with another one.
 func ErrCredentialsConflict() *platform.Problem {
 	return platform.NewProblem(http.StatusConflict, CodeConflict, "Your credentials changed while this request was processed. Please try again.")
+}
+
+// ErrPasswordChangeRequired is a 403 for a session that must change its password first
+// (AUTH-008): a newly provisioned Admin may do nothing else.
+func ErrPasswordChangeRequired() *platform.Problem {
+	return platform.NewProblem(http.StatusForbidden, CodePasswordChange, "You must change your password before continuing.")
 }

@@ -67,6 +67,12 @@ func run() error {
 	policy := event.NewPolicyFromConfig(cfg, clock)
 	recorder := audit.NewRecorder(db, clock)
 
+	// ADM-004: Admins exist only because the Vault-supplied file lists them. A conflict
+	// with a Participant (or an unreadable file) must stop the server, not be skipped.
+	if _, err := auth.SeedAdmins(context.Background(), db, recorder, cfg.AdminsFile, log); err != nil {
+		return fmt.Errorf("seed admins: %w", err)
+	}
+
 	// Sessions live in MariaDB (ADR 0007). The store's cleanup goroutine is library housekeeping.
 	store := mysqlstore.New(db.DB)
 	defer store.StopCleanup()
@@ -88,6 +94,8 @@ func run() error {
 	router.Use(platform.RateLimitByIP(cfg.AuthRateLimit, clock, log, apiBase+"/auth/"))
 	// AUTH-009: needs the session loaded, which sessions.LoadAndSave below guarantees.
 	router.Use(platform.CSRF(sessions, log))
+	// AUTH-008: a flagged session can only change its password, read /auth/me or log out.
+	router.Use(auth.RequirePasswordChange(sessions))
 	api.RegisterHandlersWithOptions(router, srv, api.GinServerOptions{BaseURL: apiBase})
 
 	httpSrv := &http.Server{

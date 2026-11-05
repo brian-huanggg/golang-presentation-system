@@ -85,31 +85,70 @@ func (h *Argon2idHasher) Hash(ctx context.Context, password string) (string, err
 		argon2.Version, argonMemoryKiB, argonTime, argonThreads, enc.EncodeToString(salt), enc.EncodeToString(key)), nil
 }
 
-// verifyPassword checks password against a PHC string produced by Hash. It lives
-// next to Hash so the format has one owner.
-func verifyPassword(password, phc string) (bool, error) {
+// phcHash is a parsed Argon2id PHC string.
+type phcHash struct {
+	m, t      uint32
+	p         uint8
+	salt, key []byte
+}
+
+// parsePHC reads a PHC string produced by Hash. It lives next to Hash so the format
+// has one owner. Errors never echo the input: it may be a secret.
+func parsePHC(phc string) (phcHash, error) {
 	parts := strings.Split(phc, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" {
-		return false, fmt.Errorf("unsupported hash format")
+		return phcHash{}, fmt.Errorf("unsupported hash format")
 	}
 	var version int
 	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil || version != argon2.Version {
-		return false, fmt.Errorf("unsupported argon2 version")
+		return phcHash{}, fmt.Errorf("unsupported argon2 version")
 	}
-	var m, t uint32
-	var p uint8
-	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &m, &t, &p); err != nil {
-		return false, fmt.Errorf("bad argon2 parameters: %w", err)
+	var h phcHash
+	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &h.m, &h.t, &h.p); err != nil {
+		return phcHash{}, fmt.Errorf("bad argon2 parameters")
 	}
 	enc := base64.RawStdEncoding
-	salt, err := enc.DecodeString(parts[4])
-	if err != nil {
-		return false, fmt.Errorf("bad salt: %w", err)
+	var err error
+	if h.salt, err = enc.DecodeString(parts[4]); err != nil {
+		return phcHash{}, fmt.Errorf("bad salt")
 	}
-	want, err := enc.DecodeString(parts[5])
-	if err != nil {
-		return false, fmt.Errorf("bad hash: %w", err)
+	if h.key, err = enc.DecodeString(parts[5]); err != nil {
+		return phcHash{}, fmt.Errorf("bad hash")
 	}
-	got := argon2.IDKey([]byte(normalizePassword(password)), salt, t, m, p, uint32(len(want)))
-	return subtle.ConstantTimeCompare(got, want) == 1, nil
+	return h, nil
+}
+
+// Bounds for hashes we accept from outside (the Admin seed file). They stop a typo or a
+// hostile file from making every login of that account allocate gigabytes.
+const (
+	minSaltLen   = 8
+	minKeyLen    = 16
+	maxArgonMem  = 256 * 1024 // KiB
+	maxArgonTime = 10
+	maxArgonPar  = 8
+)
+
+// checkPHC reports whether phc is a well-formed Argon2id hash with sane parameters.
+func checkPHC(phc string) error {
+	h, err := parsePHC(phc)
+	if err != nil {
+		return err
+	}
+	if len(h.salt) < minSaltLen || len(h.key) < minKeyLen {
+		return fmt.Errorf("salt or hash too short")
+	}
+	if h.m == 0 || h.m > maxArgonMem || h.t == 0 || h.t > maxArgonTime || h.p == 0 || h.p > maxArgonPar {
+		return fmt.Errorf("argon2 parameters out of range")
+	}
+	return nil
+}
+
+// verifyPassword checks password against a PHC string produced by Hash.
+func verifyPassword(password, phc string) (bool, error) {
+	h, err := parsePHC(phc)
+	if err != nil {
+		return false, err
+	}
+	got := argon2.IDKey([]byte(normalizePassword(password)), h.salt, h.t, h.m, h.p, uint32(len(h.key)))
+	return subtle.ConstantTimeCompare(got, h.key) == 1, nil
 }

@@ -94,6 +94,7 @@ func (s *Service) ChangePassword(ctx context.Context, current, newPassword, sour
 	// new version; its token is not renewed because that would also reset the absolute
 	// 8 hour limit (AUTH-005).
 	s.sessions.Put(ctx, keyCredVersion, row.CredentialVersion+1)
+	s.sessions.Put(ctx, keyMustChange, false) // AUTH-008: the gate opens
 	// ADR 0018: a password change rotates the CSRF token. The handler hands the new one
 	// to the SPA as a cookie. A failure here must not undo the committed change; the
 	// old token simply stays in force.

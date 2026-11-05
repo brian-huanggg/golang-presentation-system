@@ -50,6 +50,7 @@ type Sessions interface {
 	Put(ctx context.Context, key string, val any)
 	GetInt64(ctx context.Context, key string) int64
 	GetString(ctx context.Context, key string) string
+	GetBool(ctx context.Context, key string) bool
 	Destroy(ctx context.Context) error
 	Token(ctx context.Context) string
 	Iterate(ctx context.Context, fn func(context.Context) error) error
@@ -254,6 +255,7 @@ func (s *Service) Login(ctx context.Context, employeeID, password, sourceIP stri
 	// The version read together with the hash we just verified (ADR 0019): if a password
 	// change committed in between, this session is stale and CurrentUser will reject it.
 	s.sessions.Put(ctx, keyCredVersion, row.CredentialVersion)
+	s.sessions.Put(ctx, keyMustChange, row.MustChangePassword)
 
 	// AUTH-009: a fresh per-session CSRF token on every login (the session was just renewed).
 	csrf, err := platform.NewCSRFToken()
