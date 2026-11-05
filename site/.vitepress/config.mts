@@ -20,8 +20,9 @@ export default defineConfig({
           { text: 'Platform 基礎設施', link: '/platform-foundation' },
           { text: 'Audit 套件', link: '/audit-recorder' },
           { text: 'Event Policy 截止時間', link: '/event-policy' },
-          { text: 'DB Migration v1', link: '/db-migrations-v1' }
-          { text: '上傳管線 Spike', link: '/upload-pipeline' }
+          { text: 'DB Migration v1', link: '/db-migrations-v1' },
+          { text: '上傳管線 Spike', link: '/upload-pipeline' },
+          { text: '註冊 API 與表單', link: '/registration' }
         ]
       }
     ],
