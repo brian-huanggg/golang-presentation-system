@@ -223,3 +223,25 @@ func TestValueTypes(t *testing.T) {
 	_, err = ParseAwardCategory("sales")
 	assert.Error(t, err)
 }
+
+func TestLoad_RateLimitAndTrustedProxies(t *testing.T) {
+	c, err := load(validEnv())
+	require.NoError(t, err)
+	assert.Empty(t, c.TrustedProxies, "default trusts no proxy")
+	assert.Equal(t, RateLimitConfig{Burst: 10, Refill: 6 * time.Second}, c.AuthRateLimit)
+
+	m := validEnv()
+	m["TRUSTED_PROXIES"], m["AUTH_RATE_LIMIT_BURST"], m["AUTH_RATE_LIMIT_REFILL"] = " 10.0.0.1, 172.16.0.0/12 ,", "3", "1m"
+	c, err = load(m)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"10.0.0.1", "172.16.0.0/12"}, c.TrustedProxies)
+	assert.Equal(t, RateLimitConfig{Burst: 3, Refill: time.Minute}, c.AuthRateLimit)
+
+	for k, v := range map[string]string{"TRUSTED_PROXIES": "not-an-ip", "AUTH_RATE_LIMIT_BURST": "0", "AUTH_RATE_LIMIT_REFILL": "0s"} {
+		m := validEnv()
+		m[k] = v
+		_, err := load(m)
+		require.Error(t, err, k)
+		assert.Contains(t, err.Error(), k)
+	}
+}

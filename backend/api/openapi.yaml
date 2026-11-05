@@ -46,6 +46,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RegisteredUser"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
   /auth/login:
@@ -81,6 +83,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionUser"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
   /auth/logout:
@@ -96,6 +100,8 @@ paths:
       responses:
         "204":
           description: No live session remains
+        "429":
+          $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
   /auth/me:
@@ -116,6 +122,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionUser"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
 components:
@@ -126,6 +134,19 @@ components:
       name: esg_session
       description: Opaque server-side session token (HttpOnly; the SPA never reads it).
   responses:
+    RateLimited:
+      description: >
+        Too many requests from this network address (AUTH-004). Applies to every
+        `/auth/*` operation, independent of the per-account lockout. Code `rate_limited`.
+      headers:
+        Retry-After:
+          description: Seconds to wait before the next attempt.
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     Problem:
       description: RFC 9457 Problem Details
       content:
