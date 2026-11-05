@@ -17,7 +17,7 @@ set -euo pipefail
 : "${MARIADB_USER:?application user required}"
 
 # Tables the app may fully read and write. audit_record is deliberately absent.
-APP_TABLES=()
+APP_TABLES=(user sessions)
 
 sql="REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${MARIADB_USER}'@'%';
 GRANT USAGE ON *.* TO '${MARIADB_USER}'@'%';
