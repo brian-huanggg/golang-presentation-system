@@ -1,6 +1,43 @@
 {
-  "app": { "title": "ESG Award", "home": "Home" },
-  "language": { "label": "Language", "zh-TW": "繁體中文", "en": "English" },
-  "error": { "unexpected": "Something went wrong.", "reload": "Reload" },
-  "notFound": "Page not found."
+  "app": {
+    "title": "ESG Award",
+    "home": "Home"
+  },
+  "language": {
+    "label": "Language",
+    "zh-TW": "繁體中文",
+    "en": "English"
+  },
+  "error": {
+    "unexpected": "Something went wrong.",
+    "reload": "Reload"
+  },
+  "notFound": "Page not found.",
+  "auth": {
+    "register": {
+      "title": "Register",
+      "employeeId": "Employee ID",
+      "employeeIdHint": "6 digits",
+      "fullName": "Full name",
+      "department": "Department",
+      "password": "Password",
+      "preferredLanguage": "Preferred language",
+      "email": "Email (optional)",
+      "emailHint": "Stored only; not verified and not used to contact you.",
+      "submit": "Register",
+      "success": "Registration complete.",
+      "fieldErrors": {
+        "required": "This field is required.",
+        "invalid_format": "The format is not valid.",
+        "invalid_value": "Please choose a valid option.",
+        "too_long": "This value is too long."
+      },
+      "problems": {
+        "deadline_passed": "The registration deadline has passed.",
+        "employee_id_taken": "This Employee ID is already registered.",
+        "invalid_request": "The request could not be understood. Please check the form and try again.",
+        "unexpected": "Something went wrong. Please try again later."
+      }
+    }
+  }
 }

@@ -7,10 +7,36 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Defines values for Department.
+const (
+	BCID Department = "BCID"
+	DEID Department = "DEID"
+	NTAD Department = "NTAD"
+	TSID Department = "TSID"
+)
+
 // Defines values for HealthStatus.
 const (
 	Ok HealthStatus = "ok"
 )
+
+// Defines values for Language.
+const (
+	En   Language = "en"
+	ZhTW Language = "zh-TW"
+)
+
+// Department defines model for Department.
+type Department string
+
+// FieldError defines model for FieldError.
+type FieldError struct {
+	// Code Stable code, e.g. `required`, `invalid_format`, `too_long`.
+	Code string `json:"code"`
+
+	// Field JSON name of the invalid request field.
+	Field string `json:"field"`
+}
 
 // Health defines model for Health.
 type Health struct {
@@ -20,18 +46,57 @@ type Health struct {
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
 
+// Language BCP 47 tag offered by the UI (I18N-001).
+type Language string
+
 // Problem defines model for Problem.
 type Problem struct {
 	// Code Stable machine-readable error code for the frontend.
 	Code   string  `json:"code"`
 	Detail *string `json:"detail,omitempty"`
-	Status int     `json:"status"`
-	Title  string  `json:"title"`
-	Type   string  `json:"type"`
+
+	// Errors Per-field validation failures (code `validation_failed`).
+	Errors *[]FieldError `json:"errors,omitempty"`
+	Status int           `json:"status"`
+	Title  string        `json:"title"`
+	Type   string        `json:"type"`
 }
+
+// RegisterRequest defines model for RegisterRequest.
+type RegisterRequest struct {
+	Department Department `json:"department"`
+
+	// Email Optional; format-checked only, never verified or unique (REG-008).
+	Email *string `json:"email,omitempty"`
+
+	// EmployeeId Exactly six digits (REG-002).
+	EmployeeId string `json:"employeeId"`
+	FullName   string `json:"fullName"`
+	Password   string `json:"password"`
+
+	// PreferredLanguage BCP 47 tag offered by the UI (I18N-001).
+	PreferredLanguage Language `json:"preferredLanguage"`
+}
+
+// RegisteredUser defines model for RegisteredUser.
+type RegisteredUser struct {
+	Department Department `json:"department"`
+	Email      *string    `json:"email,omitempty"`
+	EmployeeId string     `json:"employeeId"`
+	FullName   string     `json:"fullName"`
+
+	// PreferredLanguage BCP 47 tag offered by the UI (I18N-001).
+	PreferredLanguage Language `json:"preferredLanguage"`
+}
+
+// RegisterJSONRequestBody defines body for Register for application/json ContentType.
+type RegisterJSONRequestBody = RegisterRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Register a Participant account (REG-001..003, REG-006, REG-009)
+	// (POST /auth/register)
+	Register(c *gin.Context)
 	// Liveness probe
 	// (GET /health)
 	GetHealth(c *gin.Context)
@@ -45,6 +110,19 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// Register operation middleware
+func (siw *ServerInterfaceWrapper) Register(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.Register(c)
+}
 
 // GetHealth operation middleware
 func (siw *ServerInterfaceWrapper) GetHealth(c *gin.Context) {
@@ -86,5 +164,6 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
+	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 }

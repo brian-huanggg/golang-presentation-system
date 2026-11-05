@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register a Participant account (REG-001..003, REG-006, REG-009)
+         * @description Open to visitors. Rejected with 403 `deadline_passed` after the event deadline (REG-006), 400 `validation_failed` with per-field codes for invalid input, and 409 `employee_id_taken` when the Employee ID is already registered (REG-003; disclosure is accepted by REG-009).
+         */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -36,6 +56,39 @@ export interface components {
             detail?: string;
             /** @description Stable machine-readable error code for the frontend. */
             code: string;
+            /** @description Per-field validation failures (code `validation_failed`). */
+            errors?: components["schemas"]["FieldError"][];
+        };
+        FieldError: {
+            /** @description JSON name of the invalid request field. */
+            field: string;
+            /** @description Stable code, e.g. `required`, `invalid_format`, `too_long`. */
+            code: string;
+        };
+        /** @enum {string} */
+        Department: "TSID" | "BCID" | "DEID" | "NTAD";
+        /**
+         * @description BCP 47 tag offered by the UI (I18N-001).
+         * @enum {string}
+         */
+        Language: "zh-TW" | "en";
+        RegisterRequest: {
+            /** @description Exactly six digits (REG-002). */
+            employeeId: string;
+            fullName: string;
+            department: components["schemas"]["Department"];
+            /** Format: password */
+            password: string;
+            preferredLanguage: components["schemas"]["Language"];
+            /** @description Optional; format-checked only, never verified or unique (REG-008). */
+            email?: string;
+        };
+        RegisteredUser: {
+            employeeId: string;
+            fullName: string;
+            department: components["schemas"]["Department"];
+            preferredLanguage: components["schemas"]["Language"];
+            email?: string;
         };
     };
     responses: {
@@ -72,6 +125,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Account created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisteredUser"];
                 };
             };
             default: components["responses"]["Problem"];

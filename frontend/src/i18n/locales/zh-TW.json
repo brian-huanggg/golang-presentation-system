@@ -1,6 +1,43 @@
 {
-  "app": { "title": "ESG 獎", "home": "首頁" },
-  "language": { "label": "語言", "zh-TW": "繁體中文", "en": "English" },
-  "error": { "unexpected": "發生未預期的錯誤。", "reload": "重新載入" },
-  "notFound": "找不到頁面。"
+  "app": {
+    "title": "ESG 獎",
+    "home": "首頁"
+  },
+  "language": {
+    "label": "語言",
+    "zh-TW": "繁體中文",
+    "en": "English"
+  },
+  "error": {
+    "unexpected": "發生未預期的錯誤。",
+    "reload": "重新載入"
+  },
+  "notFound": "找不到頁面。",
+  "auth": {
+    "register": {
+      "title": "註冊",
+      "employeeId": "員工編號",
+      "employeeIdHint": "6 位數字",
+      "fullName": "姓名",
+      "department": "部門",
+      "password": "密碼",
+      "preferredLanguage": "偏好語言",
+      "email": "Email（選填）",
+      "emailHint": "僅供儲存，不會驗證，也不會用來聯絡您。",
+      "submit": "註冊",
+      "success": "註冊完成。",
+      "fieldErrors": {
+        "required": "此欄位為必填。",
+        "invalid_format": "格式不正確。",
+        "invalid_value": "請選擇有效的選項。",
+        "too_long": "內容過長。"
+      },
+      "problems": {
+        "deadline_passed": "已超過註冊截止時間。",
+        "employee_id_taken": "此員工編號已註冊。",
+        "invalid_request": "無法處理此請求，請檢查表單後再試一次。",
+        "unexpected": "發生錯誤，請稍後再試。"
+      }
+    }
+  }
 }
