@@ -31,6 +31,11 @@ export function Layout() {
           {user && (
             <>
               <Typography sx={{ mr: 2 }}>{t("auth.logout.signedInAs", { name: user.fullName })}</Typography>
+              {user.role === "ADMIN" && (
+                <Button color="inherit" component={RouterLink} to="/admin/teams">
+                  {t("admin.nav")}
+                </Button>
+              )}
               <Button color="inherit" component={RouterLink} to="/account/password">
                 {t("auth.changePassword.link")}
               </Button>
