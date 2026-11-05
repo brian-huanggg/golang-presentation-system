@@ -21,6 +21,7 @@ export default defineConfig({
           { text: 'Audit 套件', link: '/audit-recorder' },
           { text: 'Event Policy 截止時間', link: '/event-policy' },
           { text: 'DB Migration v1', link: '/db-migrations-v1' }
+          { text: '上傳管線 Spike', link: '/upload-pipeline' }
         ]
       }
     ],
