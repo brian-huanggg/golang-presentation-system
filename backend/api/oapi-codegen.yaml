@@ -1,0 +1,8 @@
+# oapi-codegen configuration (ADR 0005). Gin server interface plus models, no
+# strict-server glue. Paths are relative to internal/api, where go:generate runs.
+# Output is committed; scripts/api-check.sh guards against drift.
+package: api
+output: api.gen.go
+generate:
+  gin-server: true
+  models: true

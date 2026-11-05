@@ -1,0 +1,13 @@
+# Minimal pipeline: only the contract drift check exists so far (CUR-52).
+# Full CI/CD is deferred (Architecture OI-04); extend this file when it is in scope.
+stages: [check]
+
+api-contract:
+  stage: check
+  image: golang:1.24
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    # Regenerates internal/api from openapi.yaml and fails if the committed output differs.
+    - cd backend && ./scripts/api-check.sh
