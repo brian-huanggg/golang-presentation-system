@@ -56,6 +56,8 @@ type env struct {
 	store *memstore.MemStore
 	h     http.Handler
 	clock *platform.ManualClock
+	// tokens maps a session cookie value to its CSRF token, as the SPA's cookie jar would.
+	tokens map[string]string
 }
 
 func newEnv(t *testing.T, idle, lifetime time.Duration) *env {
@@ -74,6 +76,7 @@ func newEnv(t *testing.T, idle, lifetime time.Duration) *env {
 	h := NewHandler(svc, quiet())
 
 	r := gin.New()
+	r.Use(platform.CSRF(sm, quiet())) // as in production: inside LoadAndSave, before the routes
 	r.POST("/api/v1/auth/login", h.Login)
 	r.POST("/api/v1/auth/logout", h.Logout)
 	r.GET("/api/v1/auth/me", h.GetCurrentUser)
@@ -83,10 +86,18 @@ func newEnv(t *testing.T, idle, lifetime time.Duration) *env {
 }
 
 func (e *env) do(method, path, body string, cookie *http.Cookie) *httptest.ResponseRecorder {
+	return e.doCSRF(method, path, body, cookie, "")
+}
+
+// doCSRF is do plus the X-CSRF-Token header a logged-in SPA would send.
+func (e *env) doCSRF(method, path, body string, cookie *http.Cookie, csrf string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if cookie != nil {
 		req.AddCookie(cookie)
+	}
+	if csrf != "" {
+		req.Header.Set(platform.CSRFHeaderName, csrf)
 	}
 	w := httptest.NewRecorder()
 	e.h.ServeHTTP(w, req)
@@ -120,10 +131,38 @@ func sessionCookie(t *testing.T, w *httptest.ResponseRecorder) *http.Cookie {
 
 func (e *env) login(t *testing.T) *http.Cookie {
 	t.Helper()
+	c, _ := e.loginWithCSRF(t)
+	return c
+}
+
+// loginWithCSRF returns the session cookie and the value of the csrf_token cookie.
+func (e *env) loginWithCSRF(t *testing.T) (*http.Cookie, string) {
+	t.Helper()
 	e.expectUser("PARTICIPANT", false)
 	w := e.do(http.MethodPost, "/api/v1/auth/login", `{"employeeId":"123456","password":"`+loginPassword+`"}`, nil)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	return sessionCookie(t, w)
+	c, tok := sessionCookie(t, w), csrfCookie(t, w).Value
+	if e.tokens == nil {
+		e.tokens = map[string]string{}
+	}
+	e.tokens[c.Value] = tok
+	return c, tok
+}
+
+// send is do plus the CSRF header of the session behind c, like the SPA (AUTH-009).
+func (e *env) send(method, path, body string, c *http.Cookie) *httptest.ResponseRecorder {
+	return e.doCSRF(method, path, body, c, e.tokens[c.Value])
+}
+
+func csrfCookie(t *testing.T, w *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+	for _, c := range w.Result().Cookies() {
+		if c.Name == platform.CSRFCookieName {
+			return c
+		}
+	}
+	t.Fatalf("no %s cookie in response", platform.CSRFCookieName)
+	return nil
 }
 
 func (e *env) me(c *http.Cookie) *httptest.ResponseRecorder {
@@ -394,7 +433,7 @@ func TestAUTH_005_LoginRenewsTheTokenBeforeStoringIdentity(t *testing.T) {
 
 	_, err = svc.Login(context.Background(), "123456", loginPassword, "")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"renew", "put:userID", "put:employeeID", "put:role", "put:credVersion"}, ord.calls)
+	assert.Equal(t, []string{"renew", "put:userID", "put:employeeID", "put:role", "put:credVersion", "put:csrfToken"}, ord.calls)
 }
 
 type failingAuditor struct{ recorder }
@@ -421,10 +460,10 @@ func TestAUDIT_LoginFailsClosedWhenTheAuditWriteFails(t *testing.T) {
 
 func TestAUTH_006_LogoutKillsTheSessionImmediately(t *testing.T) {
 	e := newEnv(t, 30*time.Minute, 8*time.Hour)
-	c := e.login(t)
+	c, token := e.loginWithCSRF(t)
 	require.Equal(t, http.StatusOK, e.me(c).Code)
 
-	w := e.do(http.MethodPost, "/api/v1/auth/logout", "", c)
+	w := e.doCSRF(http.MethodPost, "/api/v1/auth/logout", "", c, token)
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	cleared := sessionCookie(t, w)
 	assert.Empty(t, cleared.Value, "cookie is cleared")

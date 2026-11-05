@@ -8,6 +8,7 @@ import (
 )
 
 const (
+	CsrfTokenScopes     = "csrfToken.Scopes"
 	SessionCookieScopes = "sessionCookie.Scopes"
 )
 
@@ -139,6 +140,9 @@ type UpdatePreferencesRequest struct {
 	PreferredLanguage Language `json:"preferredLanguage"`
 }
 
+// CsrfInvalid defines model for CsrfInvalid.
+type CsrfInvalid = Problem
+
 // RateLimited defines model for RateLimited.
 type RateLimited = Problem
 
@@ -232,6 +236,8 @@ func (siw *ServerInterfaceWrapper) GetCurrentUser(c *gin.Context) {
 // UpdatePreferences operation middleware
 func (siw *ServerInterfaceWrapper) UpdatePreferences(c *gin.Context) {
 
+	c.Set(CsrfTokenScopes, []string{})
+
 	c.Set(SessionCookieScopes, []string{})
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -246,6 +252,8 @@ func (siw *ServerInterfaceWrapper) UpdatePreferences(c *gin.Context) {
 
 // ChangePassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangePassword(c *gin.Context) {
+
+	c.Set(CsrfTokenScopes, []string{})
 
 	c.Set(SessionCookieScopes, []string{})
 

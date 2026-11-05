@@ -26,7 +26,8 @@ export default defineConfig({
           { text: '密碼政策 Validator', link: '/password-validator' },
           { text: '登入、登出與 Session', link: '/login-session' },
           { text: '帳號鎖定與通用錯誤訊息', link: '/account-lockout' },
-          { text: '登入 IP 限流 Middleware', link: '/ip-rate-limit' }
+          { text: '登入 IP 限流 Middleware', link: '/ip-rate-limit' },
+          { text: 'CSRF 防護', link: '/csrf' }
         ]
       }
     ],

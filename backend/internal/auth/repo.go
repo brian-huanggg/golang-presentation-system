@@ -51,7 +51,7 @@ type userRow struct {
 	Role               string         `db:"role"`
 	PreferredLanguage  string         `db:"preferred_language"`
 	PasswordHash       string         `db:"password_hash"`
-	CredentialVersion  int64          `db:"credential_version"` // ADR 0018
+	CredentialVersion  int64          `db:"credential_version"` // ADR 0019
 	MustChangePassword bool           `db:"must_change_password"`
 	FailedAttempts     int            `db:"failed_attempts"`
 	LockedUntil        sql.NullTime   `db:"locked_until"` // UTC (DSN loc=UTC)
@@ -112,7 +112,7 @@ func saveLockState(ctx context.Context, ex sqlx.ExecerContext, userID int64, att
 }
 
 // errCredentialsChanged means the credential version moved between our read and our
-// write: another password change won the race (ADR 0018).
+// write: another password change won the race (ADR 0019).
 var errCredentialsChanged = errors.New("credentials changed concurrently")
 
 // updatePassword stores a new hash, bumps the credential version, clears the forced

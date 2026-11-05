@@ -1,13 +1,13 @@
-# ADR 0018: Credential version in the session to invalidate other sessions on password change
+# ADR 0019: Credential version in the session to invalidate other sessions on password change
 
 | Item | Value |
 |---|---|
 | Status | Proposed |
 | Date | 2026-11-05 |
 | Deciders | Architect (to confirm); proposed by the developer of CUR-62 |
-| Related | PRD AUTH-005, AUTH-007, REG-007; Architecture 7.5, 9.1; ADR 0007 |
+| Related | PRD AUTH-005, AUTH-007, REG-007; Architecture 7.5, 9.1; ADR 0007, 0018 |
 
-> Numbered 0018 because 0016 and 0017 are taken. It supplements ADR 0007 (accepted ADRs are not edited) and does not replace it.
+> Numbered 0019 because 0016, 0017 and 0018 (CSRF token) are taken. It supplements ADR 0007 (accepted ADRs are not edited) and does not replace it.
 
 ## Context
 
@@ -23,7 +23,7 @@ A sweep after the fact has a race. `Iterate` reads a snapshot of the store. A lo
 
 **3. The sweep stays, as cleanup.** After the commit the service still iterates the store and destroys the user's other sessions (ADR 0007), so they disappear at once instead of at their next request. The version check is the guarantee; the sweep is best effort. If the sweep fails, the error is logged and the password change still succeeds (`204`), because the old sessions are already dead.
 
-**4. The caller's own session is kept and updated** to the new version. Its token is **not** renewed: `RenewToken` also resets the absolute 8 hour deadline, which would let a password change extend a session past AUTH-005.
+**4. The caller's own session is kept and updated** to the new version. Its session token is **not** renewed: `RenewToken` also resets the absolute 8 hour deadline, which would let a password change extend a session past AUTH-005. ADR 0018 asks for the CSRF token to be rotated on a password change; that is done on its own (a new `csrfToken` in the session, a new `csrf_token` cookie in the response), without renewing the session token.
 
 ## Alternatives considered
 

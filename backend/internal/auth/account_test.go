@@ -48,7 +48,10 @@ func (e *env) expectPasswordWrite(fromVersion int64, rows int64) {
 }
 
 func (e *env) post(path, body string, c *http.Cookie) *httptest.ResponseRecorder {
-	return e.do(http.MethodPost, path, body, c)
+	if c == nil {
+		return e.do(http.MethodPost, path, body, nil)
+	}
+	return e.send(http.MethodPost, path, body, c)
 }
 
 func (e *env) stored(token string) bool {
@@ -94,7 +97,7 @@ func TestREG_007_ChangesPasswordAndAUTH_007_EndsOtherSessionsOnly(t *testing.T) 
 	assert.NotContains(t, string(raw), "secret", "AUD-006: no password in the audit record")
 }
 
-// ADR 0018: the race the sweep cannot close. A session whose version is behind the
+// ADR 0019: the race the sweep cannot close. A session whose version is behind the
 // user's is refused on its next request even though nothing deleted it.
 func TestAUTH_007_SessionIssuedBeforePasswordChangeIsRejectedByVersion(t *testing.T) {
 	e := newEnv(t, 30*time.Minute, 8*time.Hour)
@@ -114,6 +117,7 @@ func TestREG_007_NewPasswordWorksAndAUTH_008_ClearsForcedChange(t *testing.T) {
 	w := e.do(http.MethodPost, loginPath, body(loginPassword), nil)
 	require.Equal(t, http.StatusOK, w.Code)
 	c := sessionCookie(t, w)
+	e.tokens = map[string]string{c.Value: csrfCookie(t, w).Value}
 
 	e.mock.ExpectQuery("SELECT id, employee_id").WithArgs(int64(7)).
 		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "x", nil, "ADMIN", "en", storedHash(t), 0, true, 0, nil))
@@ -235,7 +239,7 @@ func TestREG_007_RejectsMalformedBody(t *testing.T) {
 	c := e.login(t)
 
 	assert.Equal(t, http.StatusBadRequest, e.post(passwordPath, `{"currentPassword":`, c).Code)
-	assert.Equal(t, http.StatusBadRequest, e.do(http.MethodPatch, mePath, `nope`, c).Code)
+	assert.Equal(t, http.StatusBadRequest, e.send(http.MethodPatch, mePath, `nope`, c).Code)
 }
 
 // DDL-004 / DDL-006: a closed event does not stop a password change.
@@ -251,7 +255,7 @@ func TestDDL_004_PasswordChangeIgnoresTheDeadline(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 }
 
-// ADR 0018 decision 3: the version check is the guarantee, the sweep is cleanup.
+// ADR 0019 decision 3: the version check is the guarantee, the sweep is cleanup.
 func TestAUTH_007_SweepFailureStillSucceeds(t *testing.T) {
 	e := newEnv(t, 30*time.Minute, 8*time.Hour)
 	c := e.login(t)
@@ -305,7 +309,7 @@ func TestI18N_002_PersistsPreferredLanguage(t *testing.T) {
 	e.expectUserRow(0, false, 0, nil)
 	e.mock.ExpectExec("UPDATE `user` SET preferred_language = \\?").WithArgs("en", int64(7)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	w := e.do(http.MethodPatch, mePath, `{"preferredLanguage":"en"}`, c)
+	w := e.send(http.MethodPatch, mePath, `{"preferredLanguage":"en"}`, c)
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	assert.Contains(t, w.Body.String(), `"preferredLanguage":"en"`)
@@ -319,7 +323,7 @@ func TestI18N_002_RejectsUnsupportedLanguage(t *testing.T) {
 		c := e.login(t)
 		e.expectUserRow(0, false, 0, nil)
 
-		w := e.do(http.MethodPatch, mePath, `{"preferredLanguage":"`+lang+`"}`, c)
+		w := e.send(http.MethodPatch, mePath, `{"preferredLanguage":"`+lang+`"}`, c)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code, lang)
 		assert.Contains(t, w.Body.String(), `"field":"preferredLanguage"`)
@@ -343,7 +347,28 @@ func TestI18N_002_DatabaseErrorIsNotLeaked(t *testing.T) {
 	e.expectUserRow(0, false, 0, nil)
 	e.mock.ExpectExec("UPDATE `user` SET preferred_language").WillReturnError(sql.ErrConnDone)
 
-	w := e.do(http.MethodPatch, mePath, `{"preferredLanguage":"en"}`, c)
+	w := e.send(http.MethodPatch, mePath, `{"preferredLanguage":"en"}`, c)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// ADR 0018: a password change rotates the CSRF token (the session token stays).
+func TestAUTH_009_PasswordChangeRotatesTheCSRFToken(t *testing.T) {
+	e := newEnv(t, 30*time.Minute, 8*time.Hour)
+	c, old := e.loginWithCSRF(t)
+
+	e.expectUserRow(0, false, 0, nil)
+	e.expectPasswordWrite(0, 1)
+	w := e.post(passwordPath, pwBody(loginPassword, newPassword), c)
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+
+	fresh := csrfCookie(t, w).Value
+	assert.NotEmpty(t, fresh)
+	assert.NotEqual(t, old, fresh, "the cookie carries a new token")
+
+	// The old token no longer authorises anything; the new one does.
+	assert.Equal(t, http.StatusForbidden, e.doCSRF(http.MethodPatch, mePath, `{"preferredLanguage":"en"}`, c, old).Code)
+	e.expectUserRow(1, false, 0, nil)
+	e.mock.ExpectExec("UPDATE `user` SET preferred_language").WillReturnResult(sqlmock.NewResult(0, 1))
+	assert.Equal(t, http.StatusOK, e.doCSRF(http.MethodPatch, mePath, `{"preferredLanguage":"en"}`, c, fresh).Code)
 }

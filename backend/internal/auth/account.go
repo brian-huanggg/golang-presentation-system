@@ -89,17 +89,25 @@ func (s *Service) ChangePassword(ctx context.Context, current, newPassword, sour
 		return err
 	}
 
-	// From here the change is committed and the version check (ADR 0018) already rejects
+	// From here the change is committed and the version check (ADR 0019) already rejects
 	// every older session on its next request. The caller's own session is moved to the
 	// new version; its token is not renewed because that would also reset the absolute
 	// 8 hour limit (AUTH-005).
 	s.sessions.Put(ctx, keyCredVersion, row.CredentialVersion+1)
+	// ADR 0018: a password change rotates the CSRF token. The handler hands the new one
+	// to the SPA as a cookie. A failure here must not undo the committed change; the
+	// old token simply stays in force.
+	if tok, err := platform.NewCSRFToken(); err != nil {
+		s.log.ErrorContext(ctx, "rotate csrf token after password change", "error", err)
+	} else {
+		s.sessions.Put(ctx, keyCSRF, tok)
+	}
 	s.invalidateOtherSessions(ctx, row.ID)
 	return nil
 }
 
 // invalidateOtherSessions destroys the user's sessions except the caller's, so they
-// vanish at once instead of at their next request (ADR 0007, ADR 0018). It is cleanup,
+// vanish at once instead of at their next request (ADR 0007, ADR 0019). It is cleanup,
 // not the guarantee: a failure is logged and does not fail the password change.
 func (s *Service) invalidateOtherSessions(ctx context.Context, userID int64) {
 	current := s.sessions.Token(ctx)

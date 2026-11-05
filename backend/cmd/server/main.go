@@ -86,6 +86,8 @@ func run() error {
 	}
 	// Registered before the routes so it also covers the generated handlers.
 	router.Use(platform.RateLimitByIP(cfg.AuthRateLimit, clock, log, apiBase+"/auth/"))
+	// AUTH-009: needs the session loaded, which sessions.LoadAndSave below guarantees.
+	router.Use(platform.CSRF(sessions, log))
 	api.RegisterHandlersWithOptions(router, srv, api.GinServerOptions{BaseURL: apiBase})
 
 	httpSrv := &http.Server{

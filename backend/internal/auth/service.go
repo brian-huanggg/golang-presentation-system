@@ -251,9 +251,16 @@ func (s *Service) Login(ctx context.Context, employeeID, password, sourceIP stri
 	s.sessions.Put(ctx, keyUserID, row.ID)
 	s.sessions.Put(ctx, keyEmployeeID, row.EmployeeID)
 	s.sessions.Put(ctx, keyRole, row.Role)
-	// The version read together with the hash we just verified (ADR 0018): if a password
+	// The version read together with the hash we just verified (ADR 0019): if a password
 	// change committed in between, this session is stale and CurrentUser will reject it.
 	s.sessions.Put(ctx, keyCredVersion, row.CredentialVersion)
+
+	// AUTH-009: a fresh per-session CSRF token on every login (the session was just renewed).
+	csrf, err := platform.NewCSRFToken()
+	if err != nil {
+		return SessionUser{}, fmt.Errorf("generate csrf token: %w", err)
+	}
+	s.sessions.Put(ctx, keyCSRF, csrf)
 
 	if err := s.audit.RecordStandalone(ctx, audit.Entry{
 		ActorEmployeeID: row.EmployeeID, ActorRole: row.Role, Action: actionLogin,
@@ -306,6 +313,12 @@ func (s *Service) recordFailedAttempt(ctx context.Context, row userRow, sourceIP
 	return alreadyLocked, err
 }
 
+// CSRFToken returns the current session's CSRF token (AUTH-009), or "" without one.
+// The handler uses it to issue the cookie after login.
+func (s *Service) CSRFToken(ctx context.Context) string {
+	return s.sessions.GetString(ctx, keyCSRF)
+}
+
 // Logout ends the caller's session (AUTH-006). Destroy deletes it from the store
 // before returning, so the old token is dead on the next request. It is
 // idempotent: with no live session it does nothing and records nothing.
@@ -343,7 +356,7 @@ func (s *Service) CurrentUser(ctx context.Context) (SessionUser, error) {
 
 // sessionUser resolves the session to its live user row and enforces that the session
 // is still valid for it: the account exists and its credentials have not changed since
-// the session was issued (ADR 0018). Every authenticated operation starts here.
+// the session was issued (ADR 0019). Every authenticated operation starts here.
 func (s *Service) sessionUser(ctx context.Context) (userRow, error) {
 	uid := s.sessions.GetInt64(ctx, keyUserID)
 	if uid == 0 {
@@ -361,7 +374,7 @@ func (s *Service) sessionUser(ctx context.Context) (userRow, error) {
 		return userRow{}, err
 	}
 	if s.sessions.GetInt64(ctx, keyCredVersion) != row.CredentialVersion {
-		// Issued before the password last changed (ADR 0018): revoked, same as expired.
+		// Issued before the password last changed (ADR 0019): revoked, same as expired.
 		if derr := s.sessions.Destroy(ctx); derr != nil {
 			s.log.ErrorContext(ctx, "destroy session with stale credentials", "error", derr)
 		}
