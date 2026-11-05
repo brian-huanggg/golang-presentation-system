@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,13 @@ type Config struct {
 	// absolute); configurable only so tests and staging can shorten them (ADR 0007).
 	SessionIdleTimeout time.Duration
 	SessionLifetime    time.Duration
+
+	// TrustedProxies lists the proxies (IPs or CIDRs) whose X-Forwarded-For header
+	// may be believed. Empty means none: the client address is the TCP peer.
+	// Anything else lets a client forge its address and dodge the AUTH-004 limit.
+	TrustedProxies []string
+	// AuthRateLimit is the per-IP limit on /api/v1/auth/* (AUTH-004, ADR 0017).
+	AuthRateLimit RateLimitConfig
 }
 
 type DBConfig struct {
@@ -138,7 +146,32 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, errors.New("SESSION_IDLE_TIMEOUT must not exceed SESSION_LIFETIME"))
 	}
 
+	c.TrustedProxies = parseTrustedProxies(getenv("TRUSTED_PROXIES"), &errs)
+
+	burst, err := strconv.Atoi(get("AUTH_RATE_LIMIT_BURST", "10"))
+	if err != nil || burst < 1 {
+		errs = append(errs, errors.New("AUTH_RATE_LIMIT_BURST must be a positive integer"))
+	}
+	c.AuthRateLimit = RateLimitConfig{Burst: burst, Refill: duration("AUTH_RATE_LIMIT_REFILL", "6s")}
+
 	return c, errors.Join(errs...)
+}
+
+// parseTrustedProxies accepts a comma-separated list of IPs and CIDRs. Entries are
+// validated here because gin only reports a bad one when the router is configured.
+func parseTrustedProxies(s string, errs *[]error) []string {
+	var out []string
+	for _, e := range strings.Split(s, ",") {
+		if e = strings.TrimSpace(e); e == "" {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(e); err != nil && net.ParseIP(e) == nil {
+			*errs = append(*errs, fmt.Errorf("TRUSTED_PROXIES entry %q is not an IP or CIDR", e))
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // parseDeadline demands RFC 3339 with an explicit numeric offset (ADR 0014); a

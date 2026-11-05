@@ -78,11 +78,14 @@ func run() error {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
-	// X-Forwarded-For is client-controlled: trust no proxy until one is configured,
-	// otherwise audit source addresses could be forged.
-	if err := router.SetTrustedProxies(nil); err != nil {
+	// X-Forwarded-For is client-controlled: trust only the proxies in TRUSTED_PROXIES
+	// (none by default), otherwise audit source addresses and the AUTH-004 rate-limit
+	// key could be forged (ADR 0017).
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		return fmt.Errorf("trusted proxies: %w", err)
 	}
+	// Registered before the routes so it also covers the generated handlers.
+	router.Use(platform.RateLimitByIP(cfg.AuthRateLimit, clock, log, apiBase+"/auth/"))
 	api.RegisterHandlersWithOptions(router, srv, api.GinServerOptions{BaseURL: apiBase})
 
 	httpSrv := &http.Server{
