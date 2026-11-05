@@ -49,6 +49,7 @@ type Service struct {
 	event EventPolicy
 	audit Auditor
 	log   *slog.Logger
+	ideas IdeaCascade // optional, see WithIdeaCascade
 }
 
 func NewService(db *sqlx.DB, ident Identity, event EventPolicy, auditor Auditor, log *slog.Logger) *Service {

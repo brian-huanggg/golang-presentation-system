@@ -246,6 +246,38 @@ paths:
           $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
+  /teams/{teamId}:
+    delete:
+      operationId: dissolveTeam
+      summary: The Team Leader dissolves the team (TEAM-014, TEAM-015, TEAM-016)
+      description: >
+        Requires the session of the Team Leader of this team. The team is soft-deleted:
+        hidden at once, its members are released at once, its name is free for reuse at
+        once, and its Idea (if any) is soft-deleted with it. The data is removed for good
+        by `cmd/purge` after 7 days. The former roster is kept in the audit record so an
+        engineer can restore the team by hand within that time (TEAM-016); the API offers
+        no restore. The confirmation of NFR-UX-003 is asked by the UI before this call;
+        the API itself takes no confirmation field.
+
+
+        A plain Team Member gets 403 `forbidden` (they can leave instead). A Participant
+        who is not in the team gets 404 `team_not_found`; an Admin gets 403 `forbidden`
+        (R-02). After the deadline the answer is 403 `deadline_passed` (DDL-003).
+      tags: [team]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/TeamId"
+      responses:
+        "204":
+          description: Team dissolved
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        default:
+          $ref: "#/components/responses/Problem"
   /teams/{teamId}/members:
     post:
       operationId: addTeamMember

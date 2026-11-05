@@ -166,6 +166,32 @@ func deleteMember(ctx context.Context, tx sqlx.ExecerContext, teamID, userID int
 	return n == 1, nil
 }
 
+// softDeleteTeam hides the team (TEAM-015). Setting deleted_at also empties the generated
+// name_active column, which frees the name for reuse at once.
+func softDeleteTeam(ctx context.Context, tx sqlx.ExecerContext, teamID int64) error {
+	res, err := tx.ExecContext(ctx, "UPDATE team SET deleted_at = CURRENT_TIMESTAMP(6) WHERE id = ? AND deleted_at IS NULL", teamID)
+	if err != nil {
+		return fmt.Errorf("soft delete team: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("soft delete team: %w", err)
+	}
+	if n != 1 {
+		return errTeamNotFound
+	}
+	return nil
+}
+
+// deleteAllMembers releases every person of the team, the leader included, so they can
+// join or create another team at once (TEAM-015, AC-TEAM-015).
+func deleteAllMembers(ctx context.Context, tx sqlx.ExecerContext, teamID int64) error {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM team_member WHERE team_id = ?", teamID); err != nil {
+		return fmt.Errorf("release team members: %w", err)
+	}
+	return nil
+}
+
 // isDuplicateOn reports a unique-key violation on the named index. The server names the
 // index in the message ("... for key 'uq_x'"), which is how two unique indexes on one
 // statement are told apart.

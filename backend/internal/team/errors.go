@@ -58,6 +58,11 @@ func ErrAdminCannotLeave() *platform.Problem {
 	return platform.NewProblem(http.StatusForbidden, CodeForbidden, "Only a Team Member can leave a team.")
 }
 
+// ErrAdminCannotDissolve is a 403: an Admin is in no team (R-02, ADM-005).
+func ErrAdminCannotDissolve() *platform.Problem {
+	return platform.NewProblem(http.StatusForbidden, CodeForbidden, "Only the Team Leader can dissolve a team.")
+}
+
 // ErrForbidden is a 403 for an Admin trying to act as a Participant (R-02, TEAM-001).
 func ErrForbidden() *platform.Problem {
 	return platform.NewProblem(http.StatusForbidden, CodeForbidden, "Only a Participant can create a team.")

@@ -85,6 +85,16 @@ func (h *Handler) LeaveTeam(c *gin.Context, teamID api.TeamId) {
 	c.Status(http.StatusNoContent)
 }
 
+// DissolveTeam handles DELETE /teams/{teamId}.
+func (h *Handler) DissolveTeam(c *gin.Context, teamID api.TeamId) {
+	if err := h.svc.Dissolve(c.Request.Context(), teamID, c.ClientIP()); err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Status(http.StatusNoContent)
+}
+
 func toAPITeam(t Team) api.Team {
 	members := make([]api.TeamMember, 0, len(t.Members))
 	for _, m := range t.Members {
