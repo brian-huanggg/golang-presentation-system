@@ -27,7 +27,8 @@ export default defineConfig({
           { text: '登入、登出與 Session', link: '/login-session' },
           { text: '帳號鎖定與通用錯誤訊息', link: '/account-lockout' },
           { text: '登入 IP 限流 Middleware', link: '/ip-rate-limit' },
-          { text: 'CSRF 防護', link: '/csrf' }
+          { text: 'CSRF 防護', link: '/csrf' },
+          { text: 'Admin Vault Seed 與強制改密碼', link: '/vault-admin-seed' }
         ]
       }
     ],
