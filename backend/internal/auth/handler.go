@@ -95,6 +95,45 @@ func (h *Handler) GetCurrentUser(c *gin.Context) {
 	c.JSON(http.StatusOK, toAPIUser(u))
 }
 
+// maxChangePasswordBody leaves room for two 128 byte passwords.
+const maxChangePasswordBody = 2 << 10
+
+// maxPreferencesBody: a language tag only.
+const maxPreferencesBody = 1 << 10
+
+// ChangePassword handles POST /auth/password.
+func (h *Handler) ChangePassword(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxChangePasswordBody)
+	var req api.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.fail(c, ErrInvalidRequest())
+		return
+	}
+	if err := h.svc.ChangePassword(c.Request.Context(), req.CurrentPassword, req.NewPassword, c.ClientIP()); err != nil {
+		h.fail(c, err)
+		return
+	}
+	noStore(c)
+	c.Status(http.StatusNoContent)
+}
+
+// UpdatePreferences handles PATCH /auth/me.
+func (h *Handler) UpdatePreferences(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPreferencesBody)
+	var req api.UpdatePreferencesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.fail(c, ErrInvalidRequest())
+		return
+	}
+	u, err := h.svc.UpdatePreferences(c.Request.Context(), string(req.PreferredLanguage))
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	noStore(c)
+	c.JSON(http.StatusOK, toAPIUser(u))
+}
+
 // noStore keeps identity responses out of browser and proxy caches.
 func noStore(c *gin.Context) { c.Header("Cache-Control", "no-store") }
 

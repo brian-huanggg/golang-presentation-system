@@ -55,3 +55,17 @@ export function toRequest(f: RegisterForm): RegisterRequest {
     ...(email ? { email } : {}),
   };
 }
+
+export type ChangePasswordForm = { currentPassword: string; newPassword: string; confirmPassword: string };
+export type ChangePasswordField = keyof ChangePasswordForm;
+export type ChangePasswordCode = FieldCode | "mismatch" | "password_incorrect" | `password_${string}`;
+
+/** REG-007: only presence, size and confirmation here; the REG-005 policy stays on the server. */
+export function validateChangePasswordForm(f: ChangePasswordForm): Partial<Record<ChangePasswordField, ChangePasswordCode>> {
+  const errors: Partial<Record<ChangePasswordField, ChangePasswordCode>> = {};
+  if (!f.currentPassword) errors.currentPassword = "required";
+  if (!f.newPassword) errors.newPassword = "required";
+  else if (f.newPassword.length > 128) errors.newPassword = "too_long";
+  if (!errors.newPassword && f.confirmPassword !== f.newPassword) errors.confirmPassword = "mismatch";
+  return errors;
+}

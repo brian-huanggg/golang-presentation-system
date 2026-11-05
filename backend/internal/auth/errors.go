@@ -13,6 +13,7 @@ const (
 	CodeEmployeeIDTaken  = "employee_id_taken"
 	CodeInvalidCreds     = "invalid_credentials"
 	CodeUnauthenticated  = "unauthenticated"
+	CodeConflict         = "conflict"
 )
 
 // ErrValidation is a 400 carrying one entry per invalid field.
@@ -42,4 +43,9 @@ func ErrInvalidCredentials() *platform.Problem {
 // ErrUnauthenticated is a 401 for a missing, expired or destroyed session (AUTH-005).
 func ErrUnauthenticated() *platform.Problem {
 	return platform.NewProblem(http.StatusUnauthorized, CodeUnauthenticated, "Authentication is required.")
+}
+
+// ErrCredentialsConflict is a 409 for a password change that lost a race with another one.
+func ErrCredentialsConflict() *platform.Problem {
+	return platform.NewProblem(http.StatusConflict, CodeConflict, "Your credentials changed while this request was processed. Please try again.")
 }

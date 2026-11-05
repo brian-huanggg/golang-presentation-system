@@ -36,6 +36,14 @@ const (
 	PARTICIPANT SessionUserRole = "PARTICIPANT"
 )
 
+// ChangePasswordRequest defines model for ChangePasswordRequest.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+
+	// NewPassword Same policy and violation codes as `RegisterRequest.password` (REG-005).
+	NewPassword string `json:"newPassword"`
+}
+
 // Department defines model for Department.
 type Department string
 
@@ -125,11 +133,23 @@ type SessionUser struct {
 // SessionUserRole defines model for SessionUser.Role.
 type SessionUserRole string
 
+// UpdatePreferencesRequest defines model for UpdatePreferencesRequest.
+type UpdatePreferencesRequest struct {
+	// PreferredLanguage BCP 47 tag offered by the UI (I18N-001).
+	PreferredLanguage Language `json:"preferredLanguage"`
+}
+
 // RateLimited defines model for RateLimited.
 type RateLimited = Problem
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
+
+// UpdatePreferencesJSONRequestBody defines body for UpdatePreferences for application/json ContentType.
+type UpdatePreferencesJSONRequestBody = UpdatePreferencesRequest
+
+// ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
+type ChangePasswordJSONRequestBody = ChangePasswordRequest
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
@@ -145,6 +165,12 @@ type ServerInterface interface {
 	// The logged-in user, or 401 when the session is missing or expired (AUTH-005)
 	// (GET /auth/me)
 	GetCurrentUser(c *gin.Context)
+	// Save the preferred language (I18N-002)
+	// (PATCH /auth/me)
+	UpdatePreferences(c *gin.Context)
+	// Change the logged-in user's password (REG-007, REG-005, AUTH-007, AUTH-008)
+	// (POST /auth/password)
+	ChangePassword(c *gin.Context)
 	// Register a Participant account (REG-001..003, REG-005, REG-006, REG-009)
 	// (POST /auth/register)
 	Register(c *gin.Context)
@@ -203,6 +229,36 @@ func (siw *ServerInterfaceWrapper) GetCurrentUser(c *gin.Context) {
 	siw.Handler.GetCurrentUser(c)
 }
 
+// UpdatePreferences operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePreferences(c *gin.Context) {
+
+	c.Set(SessionCookieScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UpdatePreferences(c)
+}
+
+// ChangePassword operation middleware
+func (siw *ServerInterfaceWrapper) ChangePassword(c *gin.Context) {
+
+	c.Set(SessionCookieScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ChangePassword(c)
+}
+
 // Register operation middleware
 func (siw *ServerInterfaceWrapper) Register(c *gin.Context) {
 
@@ -259,6 +315,8 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/login", wrapper.Login)
 	router.POST(options.BaseURL+"/auth/logout", wrapper.Logout)
 	router.GET(options.BaseURL+"/auth/me", wrapper.GetCurrentUser)
+	router.PATCH(options.BaseURL+"/auth/me", wrapper.UpdatePreferences)
+	router.POST(options.BaseURL+"/auth/password", wrapper.ChangePassword)
 	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 }

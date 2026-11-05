@@ -1,6 +1,7 @@
 import { Link, Typography } from "@mui/material";
 import { Link as RouterLink, type RouteObject } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { ChangePasswordPage } from "../features/auth/ChangePasswordPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { useSession } from "../features/auth/useSession";
 import { RegisterPage } from "../features/auth/RegisterPage";
@@ -43,6 +44,7 @@ export const routes: RouteObject[] = [
     element: <Layout />,
     children: [
       { index: true, element: <Home /> },
+      { path: "account/password", element: <ChangePasswordPage /> },
       { path: "*", element: <NotFound /> },
     ],
   },

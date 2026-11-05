@@ -25,7 +25,7 @@ func body(password string) string {
 // expectUserState loads the user with the given lock bookkeeping.
 func (e *env) expectUserState(attempts int, lockedUntil any) {
 	e.mock.ExpectQuery("SELECT id, employee_id").WithArgs("123456").
-		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "王小明", "TSID", "PARTICIPANT", "zh-TW", storedHash(e.t), false, attempts, lockedUntil))
+		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "王小明", "TSID", "PARTICIPANT", "zh-TW", storedHash(e.t), 0, false, attempts, lockedUntil))
 }
 
 // expectCount expects the failure transaction: read `stored` under lock, save `saved` with no lock.

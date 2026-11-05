@@ -30,7 +30,15 @@
         "required": "此欄位為必填。",
         "invalid_format": "格式不正確。",
         "invalid_value": "請選擇有效的選項。",
-        "too_long": "內容過長。"
+        "too_long": "內容過長。",
+        "password_too_short": "密碼至少需 12 個字元。",
+        "password_no_upper": "需包含至少一個大寫字母。",
+        "password_no_lower": "需包含至少一個小寫字母。",
+        "password_no_symbol": "需包含至少一個符號。",
+        "password_sequence": "不可有 3 個以上連續的字母或數字（例如 abc、321）。",
+        "password_repeat": "不可有 3 個以上連續重複的字元。",
+        "password_incorrect": "目前密碼不正確。",
+        "mismatch": "兩次輸入的密碼不一致。"
       },
       "problems": {
         "deadline_passed": "已超過註冊截止時間。",
@@ -64,6 +72,21 @@
       "signedInAs": "{{name}}"
     },
     "employeeIdPlaceholder": "例如 123456",
-    "togglePassword": "顯示／隱藏"
+    "togglePassword": "顯示／隱藏",
+    "changePassword": {
+      "link": "變更密碼",
+      "title": "變更密碼",
+      "subtitle": "其他裝置上的登入將會被登出。",
+      "current": "目前密碼",
+      "new": "新密碼",
+      "confirm": "確認新密碼",
+      "submit": "變更密碼",
+      "success": "密碼已變更，其他登入階段已登出。",
+      "problems": {
+        "conflict": "儲存時您的憑證已被變更，請再試一次。",
+        "invalid_request": "無法處理此請求，請檢查表單後再試一次。",
+        "unexpected": "發生錯誤，請稍後再試。"
+      }
+    }
   }
 }

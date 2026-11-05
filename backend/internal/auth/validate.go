@@ -73,13 +73,10 @@ func validateRegister(in RegisterInput) (newUser, []platform.FieldError) {
 		u.Department = d
 	}
 
-	switch in.PreferredLanguage {
-	case "zh-TW", "en":
+	if code := checkLanguage(in.PreferredLanguage); code != "" {
+		bad("preferredLanguage", code)
+	} else {
 		u.PreferredLanguage = in.PreferredLanguage
-	case "":
-		bad("preferredLanguage", fieldRequired)
-	default:
-		bad("preferredLanguage", fieldInvalidValue)
 	}
 
 	// REG-005: one FieldError per violated rule so the user fixes all at once.
@@ -127,4 +124,17 @@ func checkPassword(pw string) []string {
 func validEmail(s string) bool {
 	addr, err := mail.ParseAddress(s)
 	return err == nil && addr.Address == s
+}
+
+// checkLanguage returns "" for a supported UI language (I18N-001) or the field error
+// code. Shared by registration and the preference update (I18N-002).
+func checkLanguage(lang string) string {
+	switch lang {
+	case "zh-TW", "en":
+		return ""
+	case "":
+		return fieldRequired
+	default:
+		return fieldInvalidValue
+	}
 }

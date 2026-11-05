@@ -30,7 +30,15 @@
         "required": "This field is required.",
         "invalid_format": "The format is not valid.",
         "invalid_value": "Please choose a valid option.",
-        "too_long": "This value is too long."
+        "too_long": "This value is too long.",
+        "password_too_short": "The password must be at least 12 characters.",
+        "password_no_upper": "Include at least one uppercase letter.",
+        "password_no_lower": "Include at least one lowercase letter.",
+        "password_no_symbol": "Include at least one symbol.",
+        "password_sequence": "Do not use 3 or more consecutive letters or digits (e.g. abc, 321).",
+        "password_repeat": "Do not repeat a character 3 or more times in a row.",
+        "password_incorrect": "The current password is not correct.",
+        "mismatch": "The passwords do not match."
       },
       "problems": {
         "deadline_passed": "The registration deadline has passed.",
@@ -64,6 +72,21 @@
       "signedInAs": "{{name}}"
     },
     "employeeIdPlaceholder": "e.g. 123456",
-    "togglePassword": "Show / hide"
+    "togglePassword": "Show / hide",
+    "changePassword": {
+      "link": "Change password",
+      "title": "Change password",
+      "subtitle": "Other devices will be logged out.",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm new password",
+      "submit": "Change password",
+      "success": "Password changed. Your other sessions have been logged out.",
+      "problems": {
+        "conflict": "Your credentials changed while saving. Please try again.",
+        "invalid_request": "The request could not be understood. Please check the form and try again.",
+        "unexpected": "Something went wrong. Please try again later."
+      }
+    }
   }
 }

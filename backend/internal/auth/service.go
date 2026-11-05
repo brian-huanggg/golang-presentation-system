@@ -18,6 +18,7 @@ const (
 	actionLogin     = "auth.login"
 	actionLogout    = "auth.logout"
 	actionLockout   = "auth.lockout"
+	actionPassword  = "auth.password_change"
 	targetUser      = "user"
 	roleParticipant = "PARTICIPANT"
 	roleAdmin       = "ADMIN"
@@ -50,6 +51,8 @@ type Sessions interface {
 	GetInt64(ctx context.Context, key string) int64
 	GetString(ctx context.Context, key string) string
 	Destroy(ctx context.Context) error
+	Token(ctx context.Context) string
+	Iterate(ctx context.Context, fn func(context.Context) error) error
 }
 
 // Service holds the auth business rules. Construct it once in main.go.
@@ -248,6 +251,9 @@ func (s *Service) Login(ctx context.Context, employeeID, password, sourceIP stri
 	s.sessions.Put(ctx, keyUserID, row.ID)
 	s.sessions.Put(ctx, keyEmployeeID, row.EmployeeID)
 	s.sessions.Put(ctx, keyRole, row.Role)
+	// The version read together with the hash we just verified (ADR 0018): if a password
+	// change committed in between, this session is stale and CurrentUser will reject it.
+	s.sessions.Put(ctx, keyCredVersion, row.CredentialVersion)
 
 	if err := s.audit.RecordStandalone(ctx, audit.Entry{
 		ActorEmployeeID: row.EmployeeID, ActorRole: row.Role, Action: actionLogin,
@@ -328,9 +334,20 @@ func (s *Service) Logout(ctx context.Context, sourceIP string) error {
 // ErrUnauthenticated when there is no live session (expired sessions are simply
 // absent from the store, so scs hands back an empty one).
 func (s *Service) CurrentUser(ctx context.Context) (SessionUser, error) {
+	row, err := s.sessionUser(ctx)
+	if err != nil {
+		return SessionUser{}, err
+	}
+	return toSessionUser(row), nil
+}
+
+// sessionUser resolves the session to its live user row and enforces that the session
+// is still valid for it: the account exists and its credentials have not changed since
+// the session was issued (ADR 0018). Every authenticated operation starts here.
+func (s *Service) sessionUser(ctx context.Context) (userRow, error) {
 	uid := s.sessions.GetInt64(ctx, keyUserID)
 	if uid == 0 {
-		return SessionUser{}, ErrUnauthenticated()
+		return userRow{}, ErrUnauthenticated()
 	}
 	row, err := findUserByID(ctx, s.db, uid)
 	if errors.Is(err, errUserNotFound) {
@@ -338,12 +355,19 @@ func (s *Service) CurrentUser(ctx context.Context) (SessionUser, error) {
 		if derr := s.sessions.Destroy(ctx); derr != nil {
 			s.log.ErrorContext(ctx, "destroy session of missing user", "error", derr)
 		}
-		return SessionUser{}, ErrUnauthenticated()
+		return userRow{}, ErrUnauthenticated()
 	}
 	if err != nil {
-		return SessionUser{}, err
+		return userRow{}, err
 	}
-	return toSessionUser(row), nil
+	if s.sessions.GetInt64(ctx, keyCredVersion) != row.CredentialVersion {
+		// Issued before the password last changed (ADR 0018): revoked, same as expired.
+		if derr := s.sessions.Destroy(ctx); derr != nil {
+			s.log.ErrorContext(ctx, "destroy session with stale credentials", "error", derr)
+		}
+		return userRow{}, ErrUnauthenticated()
+	}
+	return row, nil
 }
 
 // auditLoginFailure records a rejected login. claimedID is empty when the input was

@@ -51,12 +51,13 @@ type userRow struct {
 	Role               string         `db:"role"`
 	PreferredLanguage  string         `db:"preferred_language"`
 	PasswordHash       string         `db:"password_hash"`
+	CredentialVersion  int64          `db:"credential_version"` // ADR 0018
 	MustChangePassword bool           `db:"must_change_password"`
 	FailedAttempts     int            `db:"failed_attempts"`
 	LockedUntil        sql.NullTime   `db:"locked_until"` // UTC (DSN loc=UTC)
 }
 
-const selectUserCols = "SELECT id, employee_id, full_name, department, role, preferred_language, password_hash, must_change_password, failed_attempts, locked_until FROM `user` "
+const selectUserCols = "SELECT id, employee_id, full_name, department, role, preferred_language, password_hash, credential_version, must_change_password, failed_attempts, locked_until FROM `user` "
 
 // errUserNotFound means no row matched; callers decide how much to reveal.
 var errUserNotFound = errors.New("user not found")
@@ -106,6 +107,37 @@ func saveLockState(ctx context.Context, ex sqlx.ExecerContext, userID int64, att
 	}
 	if _, err := ex.ExecContext(ctx, "UPDATE `user` SET failed_attempts = ?, locked_until = ? WHERE id = ?", attempts, until, userID); err != nil {
 		return fmt.Errorf("save lock state of user %d: %w", userID, err)
+	}
+	return nil
+}
+
+// errCredentialsChanged means the credential version moved between our read and our
+// write: another password change won the race (ADR 0018).
+var errCredentialsChanged = errors.New("credentials changed concurrently")
+
+// updatePassword stores a new hash, bumps the credential version, clears the forced
+// change flag (AUTH-008) and any lockout state. It is conditional on the version the
+// caller verified the old password against, so two simultaneous changes cannot both win.
+func updatePassword(ctx context.Context, ex sqlx.ExecerContext, userID, expectedVersion int64, hash string) error {
+	res, err := ex.ExecContext(ctx, "UPDATE `user` SET password_hash = ?, credential_version = credential_version + 1, "+
+		"must_change_password = FALSE, failed_attempts = 0, locked_until = NULL WHERE id = ? AND credential_version = ?",
+		hash, userID, expectedVersion)
+	if err != nil {
+		return fmt.Errorf("update password of user %d: %w", userID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update password of user %d: %w", userID, err)
+	}
+	if n == 0 {
+		return errCredentialsChanged
+	}
+	return nil
+}
+
+func updatePreferredLanguage(ctx context.Context, ex sqlx.ExecerContext, userID int64, lang string) error {
+	if _, err := ex.ExecContext(ctx, "UPDATE `user` SET preferred_language = ? WHERE id = ?", lang, userID); err != nil {
+		return fmt.Errorf("update language of user %d: %w", userID, err)
 	}
 	return nil
 }

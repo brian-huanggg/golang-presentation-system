@@ -126,6 +126,67 @@ paths:
           $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
+    patch:
+      operationId: updatePreferences
+      summary: Save the preferred language (I18N-002)
+      description: >
+        Stores the language on the user account; it is applied by the SPA on every login.
+        Unsupported values are 400 `validation_failed` (field `preferredLanguage`).
+      tags: [auth]
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePreferencesRequest"
+      responses:
+        "200":
+          description: The updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        default:
+          $ref: "#/components/responses/Problem"
+  /auth/password:
+    post:
+      operationId: changePassword
+      summary: Change the logged-in user's password (REG-007, REG-005, AUTH-007, AUTH-008)
+      description: >
+        Requires a session. Allowed after the deadline (DDL-004). The current password
+        must be correct: otherwise 400 `validation_failed` with field `currentPassword`
+        and code `password_incorrect`; the attempt counts toward the account lockout
+        (AUTH-002), and while the account is locked even the correct password gets the
+        same answer. The new password must satisfy the REG-005 policy (field
+        `newPassword`, same codes as registration). On success all other sessions of the
+        user are invalidated (AUTH-007, ADR 0018), the caller's session stays valid,
+        and `mustChangePassword` is cleared (AUTH-008).
+      tags: [auth]
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password changed
+        "409":
+          description: The credentials changed concurrently; retry. Code `conflict`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     sessionCookie:
@@ -257,6 +318,23 @@ components:
         password:
           type: string
           format: password
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+        newPassword:
+          type: string
+          format: password
+          description: Same policy and violation codes as `RegisterRequest.password` (REG-005).
+    UpdatePreferencesRequest:
+      type: object
+      required: [preferredLanguage]
+      properties:
+        preferredLanguage:
+          $ref: "#/components/schemas/Language"
     SessionUser:
       type: object
       required: [employeeId, fullName, role, preferredLanguage, mustChangePassword]

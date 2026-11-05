@@ -52,7 +52,7 @@ export interface paths {
         put?: never;
         /**
          * Log in with Employee ID and password (AUTH-001, AUTH-003, AUTH-005)
-         * @description Open to visitors; allowed after the deadline (DDL-004). Email is never a login identifier (AUTH-001). Every credential failure (unknown ID, wrong password, malformed ID) is the same 401 `invalid_credentials` so the response never reveals whether an account exists (AUTH-003). On success the response sets the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) and the session token is renewed to prevent fixation.
+         * @description Open to visitors; allowed after the deadline (DDL-004). Email is never a login identifier (AUTH-001). Every credential failure (unknown ID, wrong password, malformed ID, locked account) is the same 401 `invalid_credentials` so the response never reveals whether an account exists or is locked (AUTH-003). Five consecutive wrong passwords lock the account for 5 minutes (AUTH-002); while locked even the correct password is refused with the same response. On success the response sets the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) and the session token is renewed to prevent fixation.
          */
         post: operations["login"];
         delete?: never;
@@ -95,6 +95,30 @@ export interface paths {
         get: operations["getCurrentUser"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Save the preferred language (I18N-002)
+         * @description Stores the language on the user account; it is applied by the SPA on every login. Unsupported values are 400 `validation_failed` (field `preferredLanguage`).
+         */
+        patch: operations["updatePreferences"];
+        trace?: never;
+    };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the logged-in user's password (REG-007, REG-005, AUTH-007, AUTH-008)
+         * @description Requires a session. Allowed after the deadline (DDL-004). The current password must be correct: otherwise 400 `validation_failed` with field `currentPassword` and code `password_incorrect`; the attempt counts toward the account lockout (AUTH-002), and while the account is locked even the correct password gets the same answer. The new password must satisfy the REG-005 policy (field `newPassword`, same codes as registration). On success all other sessions of the user are invalidated (AUTH-007, ADR 0018), the caller's session stays valid, and `mustChangePassword` is cleared (AUTH-008).
+         */
+        post: operations["changePassword"];
         delete?: never;
         options?: never;
         head?: never;
@@ -159,6 +183,18 @@ export interface components {
             /** Format: password */
             password: string;
         };
+        ChangePasswordRequest: {
+            /** Format: password */
+            currentPassword: string;
+            /**
+             * Format: password
+             * @description Same policy and violation codes as `RegisterRequest.password` (REG-005).
+             */
+            newPassword: string;
+        };
+        UpdatePreferencesRequest: {
+            preferredLanguage: components["schemas"]["Language"];
+        };
         SessionUser: {
             employeeId: string;
             fullName: string;
@@ -172,6 +208,17 @@ export interface components {
         };
     };
     responses: {
+        /** @description Too many requests from this network address (AUTH-004). Applies to every `/auth/*` operation, independent of the per-account lockout. Code `rate_limited`. */
+        RateLimited: {
+            headers: {
+                /** @description Seconds to wait before the next attempt. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description RFC 9457 Problem Details */
         Problem: {
             headers: {
@@ -232,6 +279,7 @@ export interface operations {
                     "application/json": components["schemas"]["RegisteredUser"];
                 };
             };
+            429: components["responses"]["RateLimited"];
             default: components["responses"]["Problem"];
         };
     };
@@ -258,6 +306,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionUser"];
                 };
             };
+            429: components["responses"]["RateLimited"];
             default: components["responses"]["Problem"];
         };
     };
@@ -277,6 +326,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            429: components["responses"]["RateLimited"];
             default: components["responses"]["Problem"];
         };
     };
@@ -298,6 +348,66 @@ export interface operations {
                     "application/json": components["schemas"]["SessionUser"];
                 };
             };
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    updatePreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionUser"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The credentials changed concurrently; retry. Code `conflict`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
             default: components["responses"]["Problem"];
         };
     };
