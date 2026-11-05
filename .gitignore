@@ -14,3 +14,8 @@ e2e/playwright-report/
 .env.*
 !.env.example
 *.tfstate
+
+# VitePress build output and cache
+site/.vitepress/dist/
+site/.vitepress/cache/
+site/node_modules/
