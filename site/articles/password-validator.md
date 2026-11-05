@@ -7,7 +7,7 @@ files:
   - backend/internal/auth/validate.go
   - backend/internal/auth/password.go
   - backend/api/openapi.yaml
-adrs: ["0005"]
+adrs: ["0005", "0016"]
 tags: [validation, unicode, normalization, table-driven-test, api-contract, security]
 updated: 2026-11-05
 ---
@@ -20,7 +20,7 @@ updated: 2026-11-05
 ## 背景與目標
 對應 PRD REG-005:至少 12 字元;大寫、小寫、符號各至少一個;不得有 3 個以上連續字母或數字(`abc`、`cba`、`123`、`321`);不得同一字元連續 3 次以上。驗收條件 AC-REG-005:`Abcdef!Xyz12Q` 必須被拒絕(含 `bcd`、`xyz`)。使用者是註冊流程(REG-001),之後改密碼(REG-007)會重用同一個函式。成功的定義:規則只有一份實作、純函式可表格驅動測試、一次回報所有違規。
 
-Architecture 9.1 規定「Password policy 的 validator 放在 `auth`,註冊與改密碼共用」,這個實作符合。目前沒有專屬 ADR(ADR 0008 只涵蓋 Argon2id,尚未撰寫),API 契約部分見 [ADR 0005](../../docs/adr/0005-spec-first-api-with-oapi-codegen.md)。
+Architecture 9.1 規定「Password policy 的 validator 放在 `auth`,註冊與改密碼共用」,這個實作符合。(ADR 0008 涵蓋 Argon2id 參數,尚未撰寫),密碼政策與正規化的決定見 [ADR 0016](../../docs/adr/0016-password-policy-and-unicode-normalization.md);API 契約部分見 [ADR 0005](../../docs/adr/0005-spec-first-api-with-oapi-codegen.md)。
 
 ## 架構與資料流
 ```mermaid
@@ -97,9 +97,9 @@ sequenceDiagram
 
 ## 已知落差
 - **改密碼尚未使用**:REG-007 / AUTH-007 還沒實作,目前只有註冊呼叫 `checkPassword`。Architecture 9.1 預期兩者共用。
-- **無專屬 ADR**:密碼政策與 code 命名沒有 ADR;ADR 0008 尚未撰寫。
+- **ADR 0016 狀態為 Proposed**:待 Architect 確認;ADR 0008(Argon2id 參數)尚未撰寫。
 - **code 清單只在 description**:`FieldError.code` 在 OpenAPI 裡是自由字串,不是 enum,前端產生的型別無法對 code 做 exhaustive check。
-- **正規化形式已固定為 NFKC**:之後若改成 NFC 或其他形式,所有既有 hash 都驗證不過;若要改需要 migration 策略(下次登入時重新 hash)。目前沒有 ADR 記錄此決定。
+- **正規化形式已固定為 NFKC**:之後若改成 NFC 或其他形式,所有既有 hash 都驗證不過;若要改需要 migration 策略(下次登入時重新 hash)。已記錄於 ADR 0016。
 - **登入尚未實作**:`verifyPassword` 已正規化,但登入流程(AUTH-001)還沒有使用它,屆時要確認走同一條路徑。
 - **分支基底**:本分支以 `wip(CUR-56)` commit 為基底,CUR-56 合併後需移除該 commit。
 
