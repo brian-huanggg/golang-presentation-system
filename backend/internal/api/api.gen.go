@@ -12,6 +12,15 @@ const (
 	SessionCookieScopes = "sessionCookie.Scopes"
 )
 
+// Defines values for AwardCategory.
+const (
+	Administration       AwardCategory = "administration"
+	Engineering          AwardCategory = "engineering"
+	ManufacturingProcess AwardCategory = "manufacturing_process"
+	PublicSafety         AwardCategory = "public_safety"
+	Transportation       AwardCategory = "transportation"
+)
+
 // Defines values for Department.
 const (
 	BCID Department = "BCID"
@@ -37,12 +46,39 @@ const (
 	PARTICIPANT SessionUserRole = "PARTICIPANT"
 )
 
+// Defines values for TeamMemberRole.
+const (
+	LEADER TeamMemberRole = "LEADER"
+	MEMBER TeamMemberRole = "MEMBER"
+)
+
+// Defines values for Track.
+const (
+	SmartInnovation        Track = "smart_innovation"
+	SustainableDevelopment Track = "sustainable_development"
+)
+
+// AwardCategory defines model for AwardCategory.
+type AwardCategory string
+
 // ChangePasswordRequest defines model for ChangePasswordRequest.
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
 
 	// NewPassword Same policy and violation codes as `RegisterRequest.password` (REG-005).
 	NewPassword string `json:"newPassword"`
+}
+
+// CreateTeamRequest defines model for CreateTeamRequest.
+type CreateTeamRequest struct {
+	AwardCategory AwardCategory `json:"awardCategory"`
+
+	// MemberIds Employee IDs of the other members; empty or absent for a team of one (TEAM-002).
+	MemberIds *[]string `json:"memberIds,omitempty"`
+
+	// Name 2 to 50 characters after trimming (TEAM-004).
+	Name  string `json:"name"`
+	Track Track  `json:"track"`
 }
 
 // Department defines model for Department.
@@ -55,6 +91,9 @@ type FieldError struct {
 
 	// Field JSON name of the invalid request field.
 	Field string `json:"field"`
+
+	// Value The offending input value, only when `field` is a list and the code concerns one element (for example one Employee ID in `memberIds`).
+	Value *string `json:"value,omitempty"`
 }
 
 // Health defines model for Health.
@@ -134,6 +173,32 @@ type SessionUser struct {
 // SessionUserRole defines model for SessionUser.Role.
 type SessionUserRole string
 
+// Team defines model for Team.
+type Team struct {
+	AwardCategory AwardCategory `json:"awardCategory"`
+	Department    Department    `json:"department"`
+	EventYear     int           `json:"eventYear"`
+	Id            int64         `json:"id"`
+
+	// Members The leader first, then the members in the order they were listed.
+	Members []TeamMember `json:"members"`
+	Name    string       `json:"name"`
+	Track   Track        `json:"track"`
+}
+
+// TeamMember defines model for TeamMember.
+type TeamMember struct {
+	EmployeeId string         `json:"employeeId"`
+	FullName   string         `json:"fullName"`
+	Role       TeamMemberRole `json:"role"`
+}
+
+// TeamMemberRole defines model for TeamMember.Role.
+type TeamMemberRole string
+
+// Track defines model for Track.
+type Track string
+
 // UpdatePreferencesRequest defines model for UpdatePreferencesRequest.
 type UpdatePreferencesRequest struct {
 	// PreferredLanguage BCP 47 tag offered by the UI (I18N-001).
@@ -158,6 +223,9 @@ type ChangePasswordJSONRequestBody = ChangePasswordRequest
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
 
+// CreateTeamJSONRequestBody defines body for CreateTeam for application/json ContentType.
+type CreateTeamJSONRequestBody = CreateTeamRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Log in with Employee ID and password (AUTH-001, AUTH-003, AUTH-005)
@@ -181,6 +249,9 @@ type ServerInterface interface {
 	// Liveness probe
 	// (GET /health)
 	GetHealth(c *gin.Context)
+	// Create a team with its roster, all or nothing (TEAM-001..008)
+	// (POST /teams)
+	CreateTeam(c *gin.Context)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -293,6 +364,23 @@ func (siw *ServerInterfaceWrapper) GetHealth(c *gin.Context) {
 	siw.Handler.GetHealth(c)
 }
 
+// CreateTeam operation middleware
+func (siw *ServerInterfaceWrapper) CreateTeam(c *gin.Context) {
+
+	c.Set(CsrfTokenScopes, []string{})
+
+	c.Set(SessionCookieScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateTeam(c)
+}
+
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL      string
@@ -327,4 +415,5 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/password", wrapper.ChangePassword)
 	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
+	router.POST(options.BaseURL+"/teams", wrapper.CreateTeam)
 }

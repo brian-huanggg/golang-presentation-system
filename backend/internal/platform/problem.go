@@ -26,6 +26,9 @@ type Problem struct {
 type FieldError struct {
 	Field string `json:"field"`
 	Code  string `json:"code"`
+	// Value is the offending element when Field is a list (for example one Employee ID
+	// in a roster), so a response can say which entry failed and why (TEAM-008).
+	Value string `json:"value,omitempty"`
 }
 
 // Error makes *Problem usable as an error that services return and the error

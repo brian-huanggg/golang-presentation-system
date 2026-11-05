@@ -23,6 +23,7 @@ import (
 	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/auth"
 	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/event"
 	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/platform"
+	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/team"
 )
 
 // apiBase must match `servers` in api/openapi.yaml.
@@ -39,8 +40,15 @@ func main() {
 // server implements api.ServerInterface by composing the feature handlers.
 // Operations of features that have not landed yet are simply absent from the spec.
 type server struct {
-	*auth.Handler
+	*authHandler
+	*teamHandler
 }
+
+// Aliases give the embedded fields distinct names; both packages call their type Handler.
+type (
+	authHandler = auth.Handler
+	teamHandler = team.Handler
+)
 
 func (server) GetHealth(c *gin.Context) { c.JSON(http.StatusOK, api.Health{Status: api.Ok}) }
 
@@ -73,7 +81,8 @@ func run() error {
 	sessions := auth.NewSessionManager(store, cfg.SessionIdleTimeout, cfg.SessionLifetime)
 
 	authSvc := auth.NewService(db, policy, auth.NewArgon2idHasher(), sessions, recorder, clock, log)
-	srv := server{Handler: auth.NewHandler(authSvc, log)}
+	teamSvc := team.NewService(db, authSvc, policy, recorder, log)
+	srv := server{authHandler: auth.NewHandler(authSvc, log), teamHandler: team.NewHandler(teamSvc, log)}
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
