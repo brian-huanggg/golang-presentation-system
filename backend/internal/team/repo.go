@@ -103,6 +103,69 @@ func insertMember(ctx context.Context, tx sqlx.ExecerContext, teamID, userID int
 	return nil
 }
 
+var errTeamNotFound = errors.New("team not found")
+
+// teamRow is the part of `team` that roster changes read.
+type teamRow struct {
+	ID         int64  `db:"id"`
+	EventYear  int    `db:"event_year"`
+	Name       string `db:"name"`
+	Track      string `db:"track"`
+	Award      string `db:"award_category"`
+	Department string `db:"department"`
+}
+
+// lockTeam locks an active team of the year. Every roster change takes this lock first,
+// so changes to one team are serialised: the size check of TEAM-006 cannot be raced
+// (Architecture 7.2). Lock order is always team, then users.
+func lockTeam(ctx context.Context, tx sqlx.QueryerContext, teamID int64, year int) (teamRow, error) {
+	var t teamRow
+	err := sqlx.GetContext(ctx, tx, &t,
+		"SELECT id, event_year, name, track, award_category, department FROM team WHERE id = ? AND event_year = ? AND deleted_at IS NULL FOR UPDATE",
+		teamID, year)
+	if errors.Is(err, sql.ErrNoRows) {
+		return teamRow{}, errTeamNotFound
+	}
+	if err != nil {
+		return teamRow{}, fmt.Errorf("lock team: %w", err)
+	}
+	return t, nil
+}
+
+// rosterRow is one person on a team.
+type rosterRow struct {
+	UserID     int64  `db:"user_id"`
+	EmployeeID string `db:"employee_id"`
+	FullName   string `db:"full_name"`
+	Role       string `db:"role"`
+}
+
+// listRoster returns the leader first, then the members in the order they joined. It is
+// read after lockTeam, so it sees every change committed before we got the lock.
+func listRoster(ctx context.Context, tx sqlx.QueryerContext, teamID int64) ([]rosterRow, error) {
+	var rows []rosterRow
+	err := sqlx.SelectContext(ctx, tx, &rows,
+		"SELECT m.user_id, u.employee_id, u.full_name, m.role FROM team_member m JOIN `user` u ON u.id = m.user_id "+
+			"WHERE m.team_id = ? ORDER BY (m.role = 'LEADER') DESC, m.created_at, m.user_id", teamID)
+	if err != nil {
+		return nil, fmt.Errorf("read roster: %w", err)
+	}
+	return rows, nil
+}
+
+// deleteMember removes one non-leader row and reports whether a row was there.
+func deleteMember(ctx context.Context, tx sqlx.ExecerContext, teamID, userID int64) (bool, error) {
+	res, err := tx.ExecContext(ctx, "DELETE FROM team_member WHERE team_id = ? AND user_id = ? AND role = 'MEMBER'", teamID, userID)
+	if err != nil {
+		return false, fmt.Errorf("delete team member: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("delete team member: %w", err)
+	}
+	return n == 1, nil
+}
+
 // isDuplicateOn reports a unique-key violation on the named index. The server names the
 // index in the message ("... for key 'uq_x'"), which is how two unique indexes on one
 // statement are told apart.

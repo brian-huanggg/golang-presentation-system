@@ -246,7 +246,87 @@ paths:
           $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
+  /teams/{teamId}/members:
+    post:
+      operationId: addTeamMember
+      summary: Leader adds a member by Employee ID (TEAM-010, TEAM-007, TEAM-006)
+      description: >
+        Requires the session of the Team Leader of this team. A Participant who is not in
+        the team gets 404 `team_not_found`; a Team Member who is not the leader gets 403
+        `forbidden`; an Admin gets 403 `forbidden` (R-02, ADM-005). After the deadline the
+        answer is 403 `deadline_passed` (DDL-003).
+
+
+        The person is checked exactly as at creation (TEAM-007). Anything wrong is 400
+        `validation_failed` with one error: `field` `employeeId`, the ID in `value` and a
+        `code` of `invalid_format`, `is_leader`, `not_registered`, `already_in_team` (in this
+        or another team this event year) or `department_mismatch`. A team that already has 5
+        people is 409 `team_full` (TEAM-006). The response is the whole team.
+      tags: [team]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/TeamId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddTeamMemberRequest"
+      responses:
+        "201":
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        default:
+          $ref: "#/components/responses/Problem"
+  /teams/{teamId}/members/{employeeId}:
+    delete:
+      operationId: removeTeamMember
+      summary: Leader removes a member (TEAM-011)
+      description: >
+        Requires the session of the Team Leader of this team; the same 404, 403 and
+        `deadline_passed` answers as adding a member. The confirmation of NFR-UX-003 is
+        asked by the UI before this call; the API itself takes no confirmation field. The
+        leader cannot be removed (TEAM-013): 409 `leader_cannot_be_removed`. An Employee ID
+        that is not in the team is 404 `member_not_found`. The person is free at once and
+        can join or create another team.
+      tags: [team]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/TeamId"
+        - name: employeeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Member removed
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
+  parameters:
+    TeamId:
+      name: teamId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
   securitySchemes:
     sessionCookie:
       type: apiKey
@@ -458,6 +538,13 @@ components:
           description: Employee IDs of the other members; empty or absent for a team of one (TEAM-002).
           items:
             type: string
+    AddTeamMemberRequest:
+      type: object
+      required: [employeeId]
+      properties:
+        employeeId:
+          type: string
+          description: Employee ID of the person to add (6 digits).
     TeamMember:
       type: object
       required: [employeeId, fullName, role]

@@ -45,6 +45,36 @@ func (h *Handler) CreateTeam(c *gin.Context) {
 	c.JSON(http.StatusCreated, toAPITeam(t))
 }
 
+// maxMemberBody: one Employee ID in a JSON object.
+const maxMemberBody = 1 << 10
+
+// AddTeamMember handles POST /teams/{teamId}/members.
+func (h *Handler) AddTeamMember(c *gin.Context, teamID api.TeamId) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxMemberBody)
+	var req api.AddTeamMemberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.fail(c, auth.ErrInvalidRequest())
+		return
+	}
+	t, err := h.svc.AddMember(c.Request.Context(), teamID, req.EmployeeId, c.ClientIP())
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusCreated, toAPITeam(t))
+}
+
+// RemoveTeamMember handles DELETE /teams/{teamId}/members/{employeeId}.
+func (h *Handler) RemoveTeamMember(c *gin.Context, teamID api.TeamId, employeeID string) {
+	if err := h.svc.RemoveMember(c.Request.Context(), teamID, employeeID, c.ClientIP()); err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Status(http.StatusNoContent)
+}
+
 func toAPITeam(t Team) api.Team {
 	members := make([]api.TeamMember, 0, len(t.Members))
 	for _, m := range t.Members {

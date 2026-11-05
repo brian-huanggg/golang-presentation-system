@@ -4,7 +4,11 @@
 package api
 
 import (
+	"fmt"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
+	"github.com/oapi-codegen/runtime"
 )
 
 const (
@@ -57,6 +61,12 @@ const (
 	SmartInnovation        Track = "smart_innovation"
 	SustainableDevelopment Track = "sustainable_development"
 )
+
+// AddTeamMemberRequest defines model for AddTeamMemberRequest.
+type AddTeamMemberRequest struct {
+	// EmployeeId Employee ID of the person to add (6 digits).
+	EmployeeId string `json:"employeeId"`
+}
 
 // AwardCategory defines model for AwardCategory.
 type AwardCategory string
@@ -205,6 +215,9 @@ type UpdatePreferencesRequest struct {
 	PreferredLanguage Language `json:"preferredLanguage"`
 }
 
+// TeamId defines model for TeamId.
+type TeamId = int64
+
 // CsrfInvalid defines model for CsrfInvalid.
 type CsrfInvalid = Problem
 
@@ -225,6 +238,9 @@ type RegisterJSONRequestBody = RegisterRequest
 
 // CreateTeamJSONRequestBody defines body for CreateTeam for application/json ContentType.
 type CreateTeamJSONRequestBody = CreateTeamRequest
+
+// AddTeamMemberJSONRequestBody defines body for AddTeamMember for application/json ContentType.
+type AddTeamMemberJSONRequestBody = AddTeamMemberRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -252,6 +268,12 @@ type ServerInterface interface {
 	// Create a team with its roster, all or nothing (TEAM-001..008)
 	// (POST /teams)
 	CreateTeam(c *gin.Context)
+	// Leader adds a member by Employee ID (TEAM-010, TEAM-007, TEAM-006)
+	// (POST /teams/{teamId}/members)
+	AddTeamMember(c *gin.Context, teamId TeamId)
+	// Leader removes a member (TEAM-011)
+	// (DELETE /teams/{teamId}/members/{employeeId})
+	RemoveTeamMember(c *gin.Context, teamId TeamId, employeeId string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -381,6 +403,71 @@ func (siw *ServerInterfaceWrapper) CreateTeam(c *gin.Context) {
 	siw.Handler.CreateTeam(c)
 }
 
+// AddTeamMember operation middleware
+func (siw *ServerInterfaceWrapper) AddTeamMember(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "teamId" -------------
+	var teamId TeamId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "teamId", c.Param("teamId"), &teamId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter teamId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(CsrfTokenScopes, []string{})
+
+	c.Set(SessionCookieScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AddTeamMember(c, teamId)
+}
+
+// RemoveTeamMember operation middleware
+func (siw *ServerInterfaceWrapper) RemoveTeamMember(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "teamId" -------------
+	var teamId TeamId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "teamId", c.Param("teamId"), &teamId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter teamId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Path parameter "employeeId" -------------
+	var employeeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "employeeId", c.Param("employeeId"), &employeeId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter employeeId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(CsrfTokenScopes, []string{})
+
+	c.Set(SessionCookieScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.RemoveTeamMember(c, teamId, employeeId)
+}
+
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL      string
@@ -416,4 +503,6 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 	router.POST(options.BaseURL+"/teams", wrapper.CreateTeam)
+	router.POST(options.BaseURL+"/teams/:teamId/members", wrapper.AddTeamMember)
+	router.DELETE(options.BaseURL+"/teams/:teamId/members/:employeeId", wrapper.RemoveTeamMember)
 }
