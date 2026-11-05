@@ -23,7 +23,8 @@ export default defineConfig({
           { text: 'DB Migration v1', link: '/db-migrations-v1' },
           { text: '上傳管線 Spike', link: '/upload-pipeline' },
           { text: '註冊 API 與表單', link: '/registration' },
-          { text: '密碼政策 Validator', link: '/password-validator' }
+          { text: '密碼政策 Validator', link: '/password-validator' },
+          { text: '登入、登出與 Session', link: '/login-session' }
         ]
       }
     ],
