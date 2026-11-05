@@ -27,7 +27,7 @@ func (s *Service) AddMember(ctx context.Context, teamID int64, rawID, sourceIP s
 		return Team{}, err
 	}
 	var out Team
-	err = s.rosterChange(ctx, actor, actionAddMember, teamID, sourceIP, func() error {
+	err = s.rosterChange(ctx, actor, actionAddMember, teamID, sourceIP, ErrNotLeader(), func() error {
 		id, perr := platform.ParseEmployeeID(rawID)
 		if perr != nil {
 			return idProblem(echo(rawID), reasonInvalidFormat)
@@ -54,7 +54,7 @@ func (s *Service) RemoveMember(ctx context.Context, teamID int64, rawID, sourceI
 	if err != nil {
 		return err
 	}
-	return s.rosterChange(ctx, actor, actionRemoveMember, teamID, sourceIP, func() error {
+	return s.rosterChange(ctx, actor, actionRemoveMember, teamID, sourceIP, ErrNotLeader(), func() error {
 		id, perr := platform.ParseEmployeeID(rawID)
 		if perr != nil {
 			return idProblem(echo(rawID), reasonInvalidFormat)
@@ -65,15 +65,80 @@ func (s *Service) RemoveMember(ctx context.Context, teamID int64, rawID, sourceI
 	})
 }
 
-// rosterChange runs the checks shared by add and remove, then body. Whatever comes back
+// Leave takes the caller out of their own team (TEAM-012). Only a plain member may leave;
+// the leader must dissolve the team instead (TEAM-013). The confirmation of NFR-UX-003
+// belongs to the UI. The team is found through the caller's own membership, so a
+// teamId the caller does not belong to is "not found".
+func (s *Service) Leave(ctx context.Context, teamID int64, sourceIP string) error {
+	actor, err := s.ident.CurrentUser(ctx)
+	if err != nil {
+		return err
+	}
+	return s.rosterChange(ctx, actor, actionLeave, teamID, sourceIP, ErrAdminCannotLeave(), func() error {
+		return platform.WithTx(ctx, s.db, func(tx *sqlx.Tx) error {
+			return s.leaveInTx(ctx, tx, actor, teamID, sourceIP)
+		})
+	})
+}
+
+func (s *Service) leaveInTx(ctx context.Context, tx *sqlx.Tx, actor auth.SessionUser, teamID int64, sourceIP string) error {
+	// Same lock order as add/remove (team first), so a leave cannot deadlock with them.
+	if _, err := lockTeam(ctx, tx, teamID, s.event.Year()); err != nil {
+		return err
+	}
+	roster, err := listRoster(ctx, tx, teamID)
+	if err != nil {
+		return err
+	}
+	var me *rosterRow
+	for i := range roster {
+		if roster[i].EmployeeID == actor.EmployeeID {
+			me = &roster[i]
+		}
+	}
+	switch {
+	case me == nil: // a stranger learns nothing about which team ids exist
+		return errTeamNotFound
+	case me.Role == RoleLeader: // TEAM-013
+		return ErrLeaderCannotLeave()
+	}
+
+	if err := s.event.CheckActor(false); err != nil { // DDL-005
+		return err
+	}
+	ok, err := deleteMember(ctx, tx, teamID, me.UserID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errTeamNotFound
+	}
+	after := make([]string, 0, len(roster)-1)
+	for _, r := range roster {
+		if r.UserID != me.UserID {
+			after = append(after, r.EmployeeID)
+		}
+	}
+	return s.audit.Record(ctx, tx, audit.Entry{
+		ActorEmployeeID: actor.EmployeeID, ActorRole: actor.Role,
+		Action: actionLeave, TargetType: targetTeam, TargetID: strconv.FormatInt(teamID, 10),
+		Result: audit.ResultSuccess, SourceIP: sourceIP,
+		Changes: map[string]any{
+			"before": map[string]any{"members": memberIDsOf(roster)},
+			"after":  map[string]any{"members": after},
+		},
+	})
+}
+
+// rosterChange runs the checks shared by add, remove and leave, then body. Whatever comes back
 // as a Problem is audited as a failure (AUD-001) and returned unchanged; other errors are
 // internal and pass through.
-func (s *Service) rosterChange(ctx context.Context, actor auth.SessionUser, action string, teamID int64, sourceIP string, body func() error) error {
+func (s *Service) rosterChange(ctx context.Context, actor auth.SessionUser, action string, teamID int64, sourceIP string, adminErr *platform.Problem, body func() error) error {
 	// R-02, ADM-005: an Admin has no part in rosters. DDL-003: checked again in the
 	// transaction because the deadline is judged when the action completes (DDL-005).
 	err := func() error {
 		if actor.Role == roleAdmin {
-			return ErrNotLeader()
+			return adminErr
 		}
 		if err := s.event.CheckActor(false); err != nil {
 			return err

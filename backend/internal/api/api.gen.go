@@ -268,6 +268,9 @@ type ServerInterface interface {
 	// Create a team with its roster, all or nothing (TEAM-001..008)
 	// (POST /teams)
 	CreateTeam(c *gin.Context)
+	// A Team Member leaves their team (TEAM-012, TEAM-013)
+	// (POST /teams/{teamId}/leave)
+	LeaveTeam(c *gin.Context, teamId TeamId)
 	// Leader adds a member by Employee ID (TEAM-010, TEAM-007, TEAM-006)
 	// (POST /teams/{teamId}/members)
 	AddTeamMember(c *gin.Context, teamId TeamId)
@@ -403,6 +406,34 @@ func (siw *ServerInterfaceWrapper) CreateTeam(c *gin.Context) {
 	siw.Handler.CreateTeam(c)
 }
 
+// LeaveTeam operation middleware
+func (siw *ServerInterfaceWrapper) LeaveTeam(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "teamId" -------------
+	var teamId TeamId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "teamId", c.Param("teamId"), &teamId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter teamId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(CsrfTokenScopes, []string{})
+
+	c.Set(SessionCookieScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.LeaveTeam(c, teamId)
+}
+
 // AddTeamMember operation middleware
 func (siw *ServerInterfaceWrapper) AddTeamMember(c *gin.Context) {
 
@@ -503,6 +534,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 	router.POST(options.BaseURL+"/teams", wrapper.CreateTeam)
+	router.POST(options.BaseURL+"/teams/:teamId/leave", wrapper.LeaveTeam)
 	router.POST(options.BaseURL+"/teams/:teamId/members", wrapper.AddTeamMember)
 	router.DELETE(options.BaseURL+"/teams/:teamId/members/:employeeId", wrapper.RemoveTeamMember)
 }

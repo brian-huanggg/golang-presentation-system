@@ -16,6 +16,7 @@ const (
 	CodeTeamFull              = "team_full"
 	CodeMemberNotFound        = "member_not_found"
 	CodeLeaderCannotBeRemoved = "leader_cannot_be_removed"
+	CodeLeaderCannotLeave     = "leader_cannot_leave"
 )
 
 // ErrNotLeader is a 403: roster changes belong to the Team Leader (TEAM-010, TEAM-011).
@@ -44,6 +45,17 @@ func ErrMemberNotFound() *platform.Problem {
 func ErrLeaderCannotBeRemoved() *platform.Problem {
 	return platform.NewProblem(http.StatusConflict, CodeLeaderCannotBeRemoved,
 		"The Team Leader cannot be removed. Dissolve the team instead.")
+}
+
+// ErrLeaderCannotLeave is a 409: the leader cannot leave, only dissolve (TEAM-013).
+func ErrLeaderCannotLeave() *platform.Problem {
+	return platform.NewProblem(http.StatusConflict, CodeLeaderCannotLeave,
+		"The Team Leader cannot leave the team. Dissolve the team instead.")
+}
+
+// ErrAdminCannotLeave is a 403: an Admin is in no team (R-02).
+func ErrAdminCannotLeave() *platform.Problem {
+	return platform.NewProblem(http.StatusForbidden, CodeForbidden, "Only a Team Member can leave a team.")
 }
 
 // ErrForbidden is a 403 for an Admin trying to act as a Participant (R-02, TEAM-001).

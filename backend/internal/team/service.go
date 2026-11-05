@@ -18,6 +18,7 @@ const (
 	actionCreate       = "team.create"
 	actionAddMember    = "team.member_add"
 	actionRemoveMember = "team.member_remove"
+	actionLeave        = "team.member_leave"
 	targetTeam         = "team"
 	roleAdmin          = "ADMIN"
 )
