@@ -1,0 +1,6 @@
+# Pinned dev toolchain (install with `mise install`). Versions follow docs/Architecture.md.
+[tools]
+go = "1.24"
+golangci-lint = "2"
+gitleaks = "latest"
+node = "22"
