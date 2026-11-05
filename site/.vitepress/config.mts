@@ -28,7 +28,8 @@ export default defineConfig({
           { text: '帳號鎖定與通用錯誤訊息', link: '/account-lockout' },
           { text: '登入 IP 限流 Middleware', link: '/ip-rate-limit' },
           { text: 'CSRF 防護', link: '/csrf' },
-          { text: 'Admin Vault Seed 與強制改密碼', link: '/vault-admin-seed' }
+          { text: 'Admin Vault Seed 與強制改密碼', link: '/vault-admin-seed' },
+          { text: 'hashpw 雜湊工具', link: '/hashpw' },
           { text: '建立團隊 all-or-nothing', link: '/create-team' }
         ]
       }
