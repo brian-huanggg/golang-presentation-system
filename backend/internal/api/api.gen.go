@@ -72,7 +72,9 @@ type RegisterRequest struct {
 	// EmployeeId Exactly six digits (REG-002).
 	EmployeeId string `json:"employeeId"`
 	FullName   string `json:"fullName"`
-	Password   string `json:"password"`
+
+	// Password Password policy (REG-005): at least 12 characters (counted as Unicode characters), at most 128 bytes; at least one uppercase letter, one lowercase letter and one symbol (punctuation or symbol, not a space); no run of 3 or more consecutive ASCII letters or digits, ascending or descending, letters case-insensitive (`abc`, `cba`, `123`, `321`); no character repeated 3 or more times in a row (`aaa`, `111`). Every violated rule is returned as its own `validation_failed` entry with field `password` and one of the codes `required`, `too_long`, `password_too_short`, `password_no_upper`, `password_no_lower`, `password_no_symbol`, `password_sequence`, `password_repeat`.
+	Password string `json:"password"`
 
 	// PreferredLanguage BCP 47 tag offered by the UI (I18N-001).
 	PreferredLanguage Language `json:"preferredLanguage"`
@@ -94,7 +96,7 @@ type RegisterJSONRequestBody = RegisterRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Register a Participant account (REG-001..003, REG-006, REG-009)
+	// Register a Participant account (REG-001..003, REG-005, REG-006, REG-009)
 	// (POST /auth/register)
 	Register(c *gin.Context)
 	// Liveness probe

@@ -82,7 +82,8 @@ func validateRegister(in RegisterInput) (newUser, []platform.FieldError) {
 		bad("preferredLanguage", fieldInvalidValue)
 	}
 
-	if code := checkPassword(in.Password); code != "" {
+	// REG-005: one FieldError per violated rule so the user fixes all at once.
+	for _, code := range checkPassword(in.Password) {
 		bad("password", code)
 	}
 
@@ -100,18 +101,18 @@ func validateRegister(in RegisterInput) (newUser, []platform.FieldError) {
 	return u, errs
 }
 
-// checkPassword returns a field error code, or "" when acceptable.
-// TODO(REG-005): the composition rules (length 12, character classes, no
-// sequences or repeats) belong to their own ticket and plug in here; until then
-// only presence and an upper bound are enforced.
-func checkPassword(pw string) string {
+// checkPassword returns the field error codes for pw, or nil when acceptable.
+// Presence and the byte upper bound short-circuit, because the composition rules
+// (REG-005) are meaningless for an empty or oversized input and the bound exists
+// to avoid doing work on it. Shared with the password-change flow (REG-007).
+func checkPassword(pw string) []string {
 	switch {
 	case pw == "":
-		return fieldRequired
+		return []string{fieldRequired}
 	case len(pw) > maxPasswordBytes:
-		return fieldTooLong
+		return []string{fieldTooLong}
 	}
-	return ""
+	return passwordViolations(pw)
 }
 
 // validEmail accepts a bare addr-spec only; "Name <a@b>" is a display-name form
