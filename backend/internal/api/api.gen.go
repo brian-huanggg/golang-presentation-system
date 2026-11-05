@@ -307,6 +307,9 @@ type ServerInterface interface {
 	// Upload the first file and create the team's Idea (IDEA-001..005, IDEA-010, IDEA-020)
 	// (POST /teams/{teamId}/idea)
 	CreateIdea(c *gin.Context, teamId TeamId)
+	// The Team Leader dissolves the team (TEAM-014, TEAM-015, TEAM-016)
+	// (DELETE /teams/{teamId})
+	DissolveTeam(c *gin.Context, teamId TeamId)
 	// A Team Member leaves their team (TEAM-012, TEAM-013)
 	// (POST /teams/{teamId}/leave)
 	LeaveTeam(c *gin.Context, teamId TeamId)
@@ -445,8 +448,13 @@ func (siw *ServerInterfaceWrapper) CreateTeam(c *gin.Context) {
 	siw.Handler.CreateTeam(c)
 }
 
+<<<<<<< HEAD
 // CreateIdea operation middleware
 func (siw *ServerInterfaceWrapper) CreateIdea(c *gin.Context) {
+=======
+// DissolveTeam operation middleware
+func (siw *ServerInterfaceWrapper) DissolveTeam(c *gin.Context) {
+>>>>>>> worktree-feat-CUR-64-soft-delete
 
 	var err error
 
@@ -471,6 +479,7 @@ func (siw *ServerInterfaceWrapper) CreateIdea(c *gin.Context) {
 	}
 
 	siw.Handler.CreateIdea(c, teamId)
+	siw.Handler.DissolveTeam(c, teamId)
 }
 
 // LeaveTeam operation middleware
@@ -602,6 +611,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 	router.POST(options.BaseURL+"/teams", wrapper.CreateTeam)
 	router.POST(options.BaseURL+"/teams/:teamId/idea", wrapper.CreateIdea)
+	router.DELETE(options.BaseURL+"/teams/:teamId", wrapper.DissolveTeam)
 	router.POST(options.BaseURL+"/teams/:teamId/leave", wrapper.LeaveTeam)
 	router.POST(options.BaseURL+"/teams/:teamId/members", wrapper.AddTeamMember)
 	router.DELETE(options.BaseURL+"/teams/:teamId/members/:employeeId", wrapper.RemoveTeamMember)
