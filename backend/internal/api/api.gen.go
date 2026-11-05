@@ -199,6 +199,12 @@ type RegisteredUser struct {
 	PreferredLanguage Language `json:"preferredLanguage"`
 }
 
+// ReplaceIdeaFileRequest defines model for ReplaceIdeaFileRequest.
+type ReplaceIdeaFileRequest struct {
+	// File A PPTX or PDF file of at most 5 MB.
+	File openapi_types.File `json:"file"`
+}
+
 // SessionUser defines model for SessionUser.
 type SessionUser struct {
 	Department *Department `json:"department,omitempty"`
@@ -257,6 +263,11 @@ type CsrfInvalid = Problem
 // RateLimited defines model for RateLimited.
 type RateLimited = Problem
 
+// ReplaceIdeaFileParams defines parameters for ReplaceIdeaFile.
+type ReplaceIdeaFileParams struct {
+	IfMatch *string `json:"If-Match,omitempty"`
+}
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
@@ -268,6 +279,9 @@ type ChangePasswordJSONRequestBody = ChangePasswordRequest
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
+
+// ReplaceIdeaFileMultipartRequestBody defines body for ReplaceIdeaFile for multipart/form-data ContentType.
+type ReplaceIdeaFileMultipartRequestBody = ReplaceIdeaFileRequest
 
 // CreateTeamJSONRequestBody defines body for CreateTeam for application/json ContentType.
 type CreateTeamJSONRequestBody = CreateTeamRequest
@@ -301,6 +315,9 @@ type ServerInterface interface {
 	// Liveness probe
 	// (GET /health)
 	GetHealth(c *gin.Context)
+	// Replace the Idea's file with a new version (IDEA-020, IDEA-021, IDEA-023, IDEA-024)
+	// (PUT /ideas/{ideaId}/file)
+	ReplaceIdeaFile(c *gin.Context, ideaId int64, params ReplaceIdeaFileParams)
 	// Create a team with its roster, all or nothing (TEAM-001..008)
 	// (POST /teams)
 	CreateTeam(c *gin.Context)
@@ -429,6 +446,58 @@ func (siw *ServerInterfaceWrapper) GetHealth(c *gin.Context) {
 	}
 
 	siw.Handler.GetHealth(c)
+}
+
+// ReplaceIdeaFile operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceIdeaFile(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "ideaId" -------------
+	var ideaId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ideaId", c.Param("ideaId"), &ideaId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter ideaId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(CsrfTokenScopes, []string{})
+
+	c.Set(SessionCookieScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReplaceIdeaFileParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for If-Match, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter If-Match: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ReplaceIdeaFile(c, ideaId, params)
 }
 
 // CreateTeam operation middleware
@@ -609,6 +678,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/password", wrapper.ChangePassword)
 	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
+	router.PUT(options.BaseURL+"/ideas/:ideaId/file", wrapper.ReplaceIdeaFile)
 	router.POST(options.BaseURL+"/teams", wrapper.CreateTeam)
 	router.POST(options.BaseURL+"/teams/:teamId/idea", wrapper.CreateIdea)
 	router.DELETE(options.BaseURL+"/teams/:teamId", wrapper.DissolveTeam)

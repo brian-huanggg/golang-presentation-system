@@ -444,6 +444,73 @@ paths:
           $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
+  /ideas/{ideaId}/file:
+    put:
+      operationId: replaceIdeaFile
+      summary: Replace the Idea's file with a new version (IDEA-020, IDEA-021, IDEA-023, IDEA-024)
+      description: >
+        Only the Team Leader or an Admin can do this (IDEA-011); a Team Member gets 403
+        `forbidden`. An unknown or deleted Idea, and an Idea of a team the caller is not
+        on, are 404 `idea_not_found`. After the deadline a Participant gets 403
+        `deadline_passed` (DDL-003, DDL-005); Admins are not restricted (DDL-006).
+
+
+        `If-Match` is required and carries the `ETag` of the Idea the caller last saw. A
+        missing header is 428 `precondition_required`; an ETag that is no longer current
+        is 412 `idea_changed` and nothing is changed (IDEA-030).
+
+
+        The body is `multipart/form-data` with exactly one `file` part, held to the same
+        rules and rejection reasons as the first upload. Each success adds a version
+        whose number is one above the latest and makes it the official entry
+        (IDEA-024). At most 10 versions are kept: when an 11th is added, the oldest is
+        removed from the database and from the object store (IDEA-021). There is no
+        operation that deletes a single version (IDEA-023).
+      tags: [idea]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: ideaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        # Optional in the schema on purpose: the service answers a missing header with
+        # 428 `precondition_required`, which the generated binder would turn into a bare 400.
+        - name: If-Match
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ReplaceIdeaFileRequest"
+      responses:
+        "200":
+          description: New version stored; it is now the current version
+          headers:
+            ETag:
+              description: New revision of the Idea, for the next `If-Match`.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Idea"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   parameters:
     TeamId:
@@ -714,6 +781,14 @@ components:
         summary:
           type: string
           maxLength: 1000
+        file:
+          type: string
+          format: binary
+          description: A PPTX or PDF file of at most 5 MB.
+    ReplaceIdeaFileRequest:
+      type: object
+      required: [file]
+      properties:
         file:
           type: string
           format: binary

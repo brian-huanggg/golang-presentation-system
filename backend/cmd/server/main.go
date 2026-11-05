@@ -121,7 +121,7 @@ func run() error {
 		return fmt.Errorf("clamd (%s): %w", cfg.ClamAVAddr, err)
 	}
 	pipeline := &upload.Pipeline{Scanner: scanner, Store: objects, Log: log}
-	ideaSvc := idea.NewService(db, ideaIdentity{auth: authSvc}, teamSvc, policy, pipeline, recorder, clock, log)
+	ideaSvc := idea.NewService(db, ideaIdentity{auth: authSvc}, teamSvc, policy, pipeline, objects, recorder, clock, log)
 
 	srv := server{
 		authHandler: auth.NewHandler(authSvc, log),
