@@ -1,0 +1,16 @@
+# Gitleaks config: start from the upstream default rules, then allow-list only
+# files that are generated or hold no source secrets, so real findings stay loud.
+title = "esg-award-site-golang gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated or dependency files"
+paths = [
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)node_modules/''',
+  '''(^|/)go\.sum$''',
+  '''(^|/)frontend/src/api/generated/''',
+  '''(^|/)backend/internal/api/''',
+]

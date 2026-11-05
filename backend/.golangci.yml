@@ -1,0 +1,86 @@
+# golangci-lint v2 config. The depguard rules mirror the allow-list in
+# docs/adr/0003-feature-packages-and-dependency-direction.md. Changing an edge means
+# a superseding ADR *and* an edit here. Rules deny the complement of the allowed set,
+# because depguard's allow-mode would also forbid stdlib and third-party imports.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard        # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        # platform: no feature package, and not api.
+        platform:
+          files: ["**/internal/platform/**"]
+          deny:
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/auth",   desc: "platform imports no feature package (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/event",  desc: "platform imports no feature package (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/team",   desc: "platform imports no feature package (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/idea",   desc: "platform imports no feature package (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/upload", desc: "platform imports no feature package (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/audit",  desc: "platform imports no feature package (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/api",    desc: "platform must not import api (ADR 0003)"}
+        # generated api: imports nothing internal.
+        api:
+          files: ["**/internal/api/**"]
+          deny:
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/platform", desc: "generated api imports nothing internal (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/auth",     desc: "generated api imports nothing internal (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/event",    desc: "generated api imports nothing internal (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/team",     desc: "generated api imports nothing internal (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/idea",     desc: "generated api imports nothing internal (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/upload",   desc: "generated api imports nothing internal (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/audit",    desc: "generated api imports nothing internal (ADR 0003)"}
+        # audit, upload, event: platform (+api) only.
+        audit:
+          files: ["**/internal/audit/**"]
+          deny:
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/auth",   desc: "audit may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/event",  desc: "audit may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/team",   desc: "audit may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/idea",   desc: "audit may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/upload", desc: "audit may import only platform (ADR 0003)"}
+        upload:
+          files: ["**/internal/upload/**"]
+          deny:
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/auth",  desc: "upload may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/event", desc: "upload may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/team",  desc: "upload may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/idea",  desc: "upload may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/audit", desc: "upload may import only platform (ADR 0003)"}
+        event:
+          files: ["**/internal/event/**"]
+          deny:
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/auth",   desc: "event may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/team",   desc: "event may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/idea",   desc: "event may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/upload", desc: "event may import only platform (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/audit",  desc: "event may import only platform (ADR 0003)"}
+        # auth: platform, audit.
+        auth:
+          files: ["**/internal/auth/**"]
+          deny:
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/event",  desc: "auth may import only platform, audit (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/team",   desc: "auth may import only platform, audit (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/idea",   desc: "auth may import only platform, audit (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/upload", desc: "auth may import only platform, audit (ADR 0003)"}
+        # team: platform, auth, event, audit. Reverse call to idea goes through IdeaCascade.
+        team:
+          files: ["**/internal/team/**"]
+          deny:
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/idea",   desc: "team must not import idea; use the IdeaCascade interface (ADR 0003)"}
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/upload", desc: "team may import only platform, auth, event, audit (ADR 0003)"}
+        # idea: platform, team, event, upload, audit.
+        idea:
+          files: ["**/internal/idea/**"]
+          deny:
+            - {pkg: "gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/auth", desc: "idea may import only platform, team, event, upload, audit (ADR 0003)"}
+
+formatters:
+  enable:
+    - gofmt

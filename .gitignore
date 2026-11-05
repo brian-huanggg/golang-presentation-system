@@ -1,0 +1,16 @@
+.claude/
+
+# Build, test and tooling output
+backend/bin/
+coverage.out
+coverage/
+node_modules/
+frontend/dist/
+e2e/test-results/
+e2e/playwright-report/
+
+# Secrets never go in the repo
+.env
+.env.*
+!.env.example
+*.tfstate
