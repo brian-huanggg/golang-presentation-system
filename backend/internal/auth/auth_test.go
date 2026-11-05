@@ -289,7 +289,7 @@ func TestHandler_Created(t *testing.T) {
 
 func TestHandler_Problems(t *testing.T) {
 	t.Run("validation lists fields", func(t *testing.T) {
-		w := serve(t, fakeGate{}, nil, `{"employeeId":"12","fullName":"A","department":"TSID","password":"x","preferredLanguage":"en"}`)
+		w := serve(t, fakeGate{}, nil, `{"employeeId":"12","fullName":"A","department":"TSID","password":"S3cret-pass!","preferredLanguage":"en"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Equal(t, platform.ProblemContentType, w.Header().Get("Content-Type"))
 		assert.JSONEq(t, `{"title":"Bad Request","status":400,"code":"validation_failed","detail":"One or more fields are invalid.",
