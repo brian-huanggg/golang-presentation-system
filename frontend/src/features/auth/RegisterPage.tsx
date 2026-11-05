@@ -1,8 +1,23 @@
-import { Alert, Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import ApartmentOutlined from "@mui/icons-material/ApartmentOutlined";
+import BadgeOutlined from "@mui/icons-material/BadgeOutlined";
+import MailOutline from "@mui/icons-material/MailOutlined";
+import PersonOutline from "@mui/icons-material/PersonOutlined";
+import TranslateOutlined from "@mui/icons-material/LanguageOutlined";
+import { Alert, MenuItem, Stack } from "@mui/material";
 import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, api, unwrap } from "../../api/client";
+import heroImage from "./assets/hero-register.jpg";
+import {
+  AuthCardLayout,
+  AuthFooterLink,
+  AuthHeader,
+  AuthSubmitButton,
+  AuthTextField,
+  FieldHint,
+  PasswordField,
+} from "./ui";
 import {
   DEPARTMENTS,
   toRequest,
@@ -61,9 +76,13 @@ export function RegisterPage() {
 
   if (register.isSuccess) {
     return (
-      <Paper sx={{ p: 3, maxWidth: 480, mx: "auto" }}>
-        <Alert severity="success">{t("auth.register.success")}</Alert>
-      </Paper>
+      <AuthCardLayout backdrop={heroImage}>
+        <Stack spacing={3}>
+          <AuthHeader title={t("auth.register.title")} subtitle={t("auth.register.subtitle")} />
+          <Alert severity="success">{t("auth.register.success")}</Alert>
+          <AuthFooterLink text={t("auth.register.haveAccount")} linkText={t("auth.register.toLogin")} to="/login" />
+        </Stack>
+      </AuthCardLayout>
     );
   }
 
@@ -77,83 +96,88 @@ export function RegisterPage() {
   const showBanner = bannerKey && bannerKey !== "validation_failed";
 
   return (
-    <Paper component="form" onSubmit={onSubmit} noValidate sx={{ p: 3, maxWidth: 480, mx: "auto" }}>
-      <Stack spacing={2}>
-        <Typography variant="h5" component="h2">
-          {t("auth.register.title")}
-        </Typography>
+    <AuthCardLayout backdrop={heroImage}>
+      <Stack component="form" onSubmit={onSubmit} noValidate spacing={3}>
+        <AuthHeader title={t("auth.register.title")} subtitle={t("auth.register.subtitle")} />
         {showBanner && <Alert severity="error">{t(`auth.register.problems.${bannerKey}`)}</Alert>}
 
-        <TextField
-          label={t("auth.register.employeeId")}
-          value={form.employeeId}
-          onChange={(e) => set("employeeId")(e.target.value)}
-          error={!!errors.employeeId}
-          helperText={helper("employeeId") ?? t("auth.register.employeeIdHint")}
-          required
-          autoComplete="username"
-          slotProps={{ htmlInput: { inputMode: "numeric" } }}
-        />
-        <TextField
-          label={t("auth.register.fullName")}
-          value={form.fullName}
-          onChange={(e) => set("fullName")(e.target.value)}
-          error={!!errors.fullName}
-          helperText={helper("fullName")}
-          required
-          autoComplete="name"
-        />
-        <TextField
-          select
-          label={t("auth.register.department")}
-          value={form.department}
-          onChange={(e) => set("department")(e.target.value)}
-          error={!!errors.department}
-          helperText={helper("department")}
-          required
-        >
-          {DEPARTMENTS.map((d) => (
-            <MenuItem key={d} value={d}>
-              {d}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          type="password"
-          label={t("auth.register.password")}
-          value={form.password}
-          onChange={(e) => set("password")(e.target.value)}
-          error={!!errors.password}
-          helperText={helper("password")}
-          required
-          autoComplete="new-password"
-        />
-        <TextField
-          select
-          label={t("auth.register.preferredLanguage")}
-          value={form.preferredLanguage}
-          onChange={(e) => set("preferredLanguage")(e.target.value)}
-          error={!!errors.preferredLanguage}
-          helperText={helper("preferredLanguage")}
-          required
-        >
-          <MenuItem value="zh-TW">{t("language.zh-TW")}</MenuItem>
-          <MenuItem value="en">{t("language.en")}</MenuItem>
-        </TextField>
-        <TextField
-          type="email"
-          label={t("auth.register.email")}
-          value={form.email}
-          onChange={(e) => set("email")(e.target.value)}
-          error={!!errors.email}
-          helperText={helper("email") ?? t("auth.register.emailHint")}
-          autoComplete="email"
-        />
+        <Stack spacing={2.5}>
+          <AuthTextField
+            label={t("auth.register.fullName")}
+            icon={<PersonOutline fontSize="small" />}
+            value={form.fullName}
+            onChange={(e) => set("fullName")(e.target.value)}
+            error={!!errors.fullName}
+            helperText={helper("fullName")}
+            required
+            autoComplete="name"
+          />
+          <AuthTextField
+            label={t("auth.register.employeeId")}
+            placeholder={t("auth.employeeIdPlaceholder")}
+            icon={<BadgeOutlined fontSize="small" />}
+            value={form.employeeId}
+            onChange={(e) => set("employeeId")(e.target.value)}
+            error={!!errors.employeeId}
+            helperText={helper("employeeId") ?? t("auth.register.employeeIdHint")}
+            required
+            autoComplete="username"
+            inputMode="numeric"
+          />
+          <AuthTextField
+            select
+            label={t("auth.register.department")}
+            icon={<ApartmentOutlined fontSize="small" />}
+            value={form.department}
+            onChange={(e) => set("department")(e.target.value)}
+            error={!!errors.department}
+            helperText={helper("department")}
+            required
+          >
+            {DEPARTMENTS.map((d) => (
+              <MenuItem key={d} value={d}>
+                {d}
+              </MenuItem>
+            ))}
+          </AuthTextField>
+          <PasswordField
+            label={t("auth.register.password")}
+            value={form.password}
+            onChange={(e) => set("password")(e.target.value)}
+            error={!!errors.password}
+            helperText={helper("password") ?? <FieldHint>{t("auth.register.passwordHint")}</FieldHint>}
+            required
+            autoComplete="new-password"
+          />
+          <AuthTextField
+            select
+            label={t("auth.register.preferredLanguage")}
+            icon={<TranslateOutlined fontSize="small" />}
+            value={form.preferredLanguage}
+            onChange={(e) => set("preferredLanguage")(e.target.value)}
+            error={!!errors.preferredLanguage}
+            helperText={helper("preferredLanguage")}
+            required
+          >
+            <MenuItem value="zh-TW">{t("language.zh-TW")}</MenuItem>
+            <MenuItem value="en">{t("language.en")}</MenuItem>
+          </AuthTextField>
+          <AuthTextField
+            type="email"
+            label={t("auth.register.email")}
+            icon={<MailOutline fontSize="small" />}
+            value={form.email}
+            onChange={(e) => set("email")(e.target.value)}
+            error={!!errors.email}
+            helperText={helper("email") ?? t("auth.register.emailHint")}
+            autoComplete="email"
+            inputMode="email"
+          />
+        </Stack>
 
-        <Button type="submit" variant="contained" disabled={register.isPending}>
-          {t("auth.register.submit")}
-        </Button>
+        <AuthSubmitButton disabled={register.isPending}>{t("auth.register.submit")}</AuthSubmitButton>
+        <AuthFooterLink text={t("auth.register.haveAccount")} linkText={t("auth.register.toLogin")} to="/login" />
       </Stack>
-    </Paper>
+    </AuthCardLayout>
   );
 }

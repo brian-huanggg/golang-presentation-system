@@ -34,11 +34,15 @@ function NotFound() {
 // Feature routes (auth, team, idea, admin) are added here as each feature lands.
 export const routes: RouteObject[] = [
   {
+    // Auth pages are full-screen (own layout, no app bar); they carry their own language switcher.
+    path: "login",
+    element: <LoginPage />,
+  },
+  { path: "register", element: <RegisterPage /> },
+  {
     element: <Layout />,
     children: [
       { index: true, element: <Home /> },
-      { path: "login", element: <LoginPage /> },
-      { path: "register", element: <RegisterPage /> },
       { path: "*", element: <NotFound /> },
     ],
   },

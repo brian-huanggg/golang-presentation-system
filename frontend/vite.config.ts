@@ -11,6 +11,8 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test-setup.ts"],
+    // userEvent typing through MUI fields is slow on the 2-vCPU dev VM; 5s default flakes under parallel load.
+    testTimeout: 20000,
     coverage: {
       provider: "v8",
       // Architecture 6: entry point and generated code are not measured.

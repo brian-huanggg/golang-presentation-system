@@ -1,10 +1,20 @@
-import { Alert, Button, Link, Paper, Stack, TextField, Typography } from "@mui/material";
+import BadgeOutlined from "@mui/icons-material/BadgeOutlined";
+import { Alert, Stack } from "@mui/material";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { ApiError, api, unwrap } from "../../api/client";
 import { setLanguage } from "../../i18n";
+import heroImage from "./assets/hero-login.jpg";
+import {
+  AuthFooterLink,
+  AuthHeader,
+  AuthSplitLayout,
+  AuthSubmitButton,
+  AuthTextField,
+  PasswordField,
+} from "./ui";
 import { SESSION_KEY, type SessionUser } from "./useSession";
 
 // AUTH-001: exactly six digits. An email address is rejected here before any request.
@@ -43,45 +53,42 @@ export function LoginPage() {
   const banner = !login.error ? undefined : code === "invalid_credentials" ? "invalid_credentials" : "unexpected";
 
   return (
-    <Paper component="form" onSubmit={onSubmit} noValidate sx={{ p: 3, maxWidth: 480, mx: "auto" }}>
-      <Stack spacing={2}>
-        <Typography variant="h5" component="h2">
-          {t("auth.login.title")}
-        </Typography>
+    <AuthSplitLayout heroImage={heroImage} heroTitle={t("auth.login.heroTitle")} heroSubtitle={t("auth.login.heroSubtitle")}>
+      <Stack component="form" onSubmit={onSubmit} noValidate spacing={3}>
+        <AuthHeader title={t("auth.login.title")} subtitle={t("auth.login.subtitle")} />
         {banner && <Alert severity="error">{t(`auth.login.problems.${banner}`)}</Alert>}
-        <TextField
-          label={t("auth.login.employeeId")}
-          value={employeeId}
-          onChange={(e) => {
-            setEmployeeId(e.target.value);
-            setIdError(false);
-          }}
-          error={idError}
-          helperText={idError ? t("auth.login.employeeIdInvalid") : t("auth.register.employeeIdHint")}
-          required
-          autoComplete="username"
-          slotProps={{ htmlInput: { inputMode: "numeric" } }}
-        />
-        <TextField
-          type="password"
-          label={t("auth.login.password")}
-          value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-            setPwError(false);
-          }}
-          error={pwError}
-          helperText={pwError ? t("auth.register.fieldErrors.required") : undefined}
-          required
-          autoComplete="current-password"
-        />
-        <Button type="submit" variant="contained" disabled={login.isPending}>
-          {t("auth.login.submit")}
-        </Button>
-        <Link component={RouterLink} to="/register">
-          {t("auth.login.toRegister")}
-        </Link>
+        <Stack spacing={2.5}>
+          <AuthTextField
+            label={t("auth.login.employeeId")}
+            placeholder={t("auth.employeeIdPlaceholder")}
+            icon={<BadgeOutlined fontSize="small" />}
+            value={employeeId}
+            onChange={(e) => {
+              setEmployeeId(e.target.value);
+              setIdError(false);
+            }}
+            error={idError}
+            helperText={idError ? t("auth.login.employeeIdInvalid") : undefined}
+            required
+            autoComplete="username"
+            inputMode="numeric"
+          />
+          <PasswordField
+            label={t("auth.login.password")}
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setPwError(false);
+            }}
+            error={pwError}
+            helperText={pwError ? t("auth.register.fieldErrors.required") : undefined}
+            required
+            autoComplete="current-password"
+          />
+        </Stack>
+        <AuthSubmitButton disabled={login.isPending}>{t("auth.login.submit")}</AuthSubmitButton>
+        <AuthFooterLink text={t("auth.login.noAccount")} linkText={t("auth.login.register")} to="/register" />
       </Stack>
-    </Paper>
+    </AuthSplitLayout>
   );
 }

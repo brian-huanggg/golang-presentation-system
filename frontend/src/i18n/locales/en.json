@@ -37,7 +37,11 @@
         "employee_id_taken": "This Employee ID is already registered.",
         "invalid_request": "The request could not be understood. Please check the form and try again.",
         "unexpected": "Something went wrong. Please try again later."
-      }
+      },
+      "subtitle": "Sign up with your employee details",
+      "passwordHint": "At least 12 characters, with an uppercase letter, a lowercase letter and a symbol. No 3 consecutive letters or digits, no character repeated 3 times.",
+      "haveAccount": "Already have an account?",
+      "toLogin": "Log in"
     },
     "login": {
       "title": "Log in",
@@ -45,15 +49,21 @@
       "employeeIdInvalid": "Enter your 6-digit Employee ID. Email addresses cannot be used to log in.",
       "password": "Password",
       "submit": "Log in",
-      "toRegister": "No account yet? Register",
       "problems": {
         "invalid_credentials": "Invalid Employee ID or password.",
         "unexpected": "Something went wrong. Please try again later."
-      }
+      },
+      "subtitle": "Log in to your account",
+      "heroTitle": "Welcome back to your\ncreative space",
+      "heroSubtitle": "Log in with your Employee ID to continue.",
+      "noAccount": "Don't have an account?",
+      "register": "Register"
     },
     "logout": {
       "button": "Log out",
       "signedInAs": "{{name}}"
-    }
+    },
+    "employeeIdPlaceholder": "e.g. 123456",
+    "togglePassword": "Show / hide"
   }
 }

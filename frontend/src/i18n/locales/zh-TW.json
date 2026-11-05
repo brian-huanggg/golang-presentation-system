@@ -37,7 +37,11 @@
         "employee_id_taken": "此員工編號已註冊。",
         "invalid_request": "無法處理此請求，請檢查表單後再試一次。",
         "unexpected": "發生錯誤，請稍後再試。"
-      }
+      },
+      "subtitle": "以您的員工資料建立帳號",
+      "passwordHint": "至少 12 個字元，需包含大寫字母、小寫字母與符號；不可有 3 個以上連續的字母或數字，也不可有 3 個以上重複字元。",
+      "haveAccount": "已經有帳號？",
+      "toLogin": "前往登入"
     },
     "login": {
       "title": "登入",
@@ -45,15 +49,21 @@
       "employeeIdInvalid": "請輸入 6 位數字的員工編號。不可使用 Email 登入。",
       "password": "密碼",
       "submit": "登入",
-      "toRegister": "還沒有帳號？前往註冊",
       "problems": {
         "invalid_credentials": "員工編號或密碼錯誤。",
         "unexpected": "發生錯誤，請稍後再試。"
-      }
+      },
+      "subtitle": "登入您的帳號",
+      "heroTitle": "歡迎回到\n您的創意空間",
+      "heroSubtitle": "請使用員工編號登入以繼續。",
+      "noAccount": "還沒有帳號？",
+      "register": "前往註冊"
     },
     "logout": {
       "button": "登出",
       "signedInAs": "{{name}}"
-    }
+    },
+    "employeeIdPlaceholder": "例如 123456",
+    "togglePassword": "顯示／隱藏"
   }
 }
