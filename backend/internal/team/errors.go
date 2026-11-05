@@ -11,7 +11,40 @@ const (
 	CodeForbidden     = "forbidden"
 	CodeAlreadyInTeam = "already_in_team"
 	CodeTeamNameTaken = "team_name_taken"
+
+	CodeTeamNotFound          = "team_not_found"
+	CodeTeamFull              = "team_full"
+	CodeMemberNotFound        = "member_not_found"
+	CodeLeaderCannotBeRemoved = "leader_cannot_be_removed"
 )
+
+// ErrNotLeader is a 403: roster changes belong to the Team Leader (TEAM-010, TEAM-011).
+// It is also what an Admin gets (R-02, ADM-005).
+func ErrNotLeader() *platform.Problem {
+	return platform.NewProblem(http.StatusForbidden, CodeForbidden, "Only the Team Leader can change the team roster.")
+}
+
+// ErrTeamNotFound is a 404. It is also the answer for a team the caller does not belong
+// to, so a stranger cannot probe which team ids exist.
+func ErrTeamNotFound() *platform.Problem {
+	return platform.NewProblem(http.StatusNotFound, CodeTeamNotFound, "Team not found.")
+}
+
+// ErrTeamFull is a 409: a team has at most 5 people, leader included (TEAM-006).
+func ErrTeamFull() *platform.Problem {
+	return platform.NewProblem(http.StatusConflict, CodeTeamFull, "The team already has 5 people.")
+}
+
+// ErrMemberNotFound is a 404: the Employee ID is not on this team's roster.
+func ErrMemberNotFound() *platform.Problem {
+	return platform.NewProblem(http.StatusNotFound, CodeMemberNotFound, "That person is not a member of this team.")
+}
+
+// ErrLeaderCannotBeRemoved is a 409: the leader can only dissolve the team (TEAM-013).
+func ErrLeaderCannotBeRemoved() *platform.Problem {
+	return platform.NewProblem(http.StatusConflict, CodeLeaderCannotBeRemoved,
+		"The Team Leader cannot be removed. Dissolve the team instead.")
+}
 
 // ErrForbidden is a 403 for an Admin trying to act as a Participant (R-02, TEAM-001).
 func ErrForbidden() *platform.Problem {

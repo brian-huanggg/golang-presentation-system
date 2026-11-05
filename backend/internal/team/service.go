@@ -15,9 +15,11 @@ import (
 )
 
 const (
-	actionCreate = "team.create"
-	targetTeam   = "team"
-	roleAdmin    = "ADMIN"
+	actionCreate       = "team.create"
+	actionAddMember    = "team.member_add"
+	actionRemoveMember = "team.member_remove"
+	targetTeam         = "team"
+	roleAdmin          = "ADMIN"
 )
 
 // Identity resolves the logged-in user from the request's session. *auth.Service
@@ -66,7 +68,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput, sourceIP string) (
 	// reject audits the refusal (AUD-001: every team action, failures included) and
 	// returns the problem unchanged. The write is outside any business transaction.
 	reject := func(p *platform.Problem) (Team, error) {
-		s.auditFailure(ctx, actor, sourceIP, p)
+		s.auditFailure(ctx, actor, actionCreate, "", sourceIP, p)
 		return Team{}, p
 	}
 
@@ -221,10 +223,10 @@ func (s *Service) createInTx(ctx context.Context, tx *sqlx.Tx, actor auth.Sessio
 	return out, nil
 }
 
-// auditFailure records a refused creation. It runs after the transaction rolled back, so
-// the record is not lost with it. A failure to write it is logged and does not change
-// the answer the caller gets.
-func (s *Service) auditFailure(ctx context.Context, actor auth.SessionUser, sourceIP string, p *platform.Problem) {
+// auditFailure records a refused team action (AUD-001 covers failures too). It runs after
+// the transaction rolled back, so the record is not lost with it. A failure to write it is
+// logged and does not change the answer the caller gets.
+func (s *Service) auditFailure(ctx context.Context, actor auth.SessionUser, action, targetID, sourceIP string, p *platform.Problem) {
 	changes := map[string]any{"reason": p.Code}
 	if len(p.Errors) > 0 {
 		// Field, code and offending ID only; the team name is arbitrary text and stays out.
@@ -232,10 +234,10 @@ func (s *Service) auditFailure(ctx context.Context, actor auth.SessionUser, sour
 	}
 	err := s.audit.RecordStandalone(ctx, audit.Entry{
 		ActorEmployeeID: actor.EmployeeID, ActorRole: actor.Role,
-		Action: actionCreate, TargetType: targetTeam,
+		Action: action, TargetType: targetTeam, TargetID: targetID,
 		Result: audit.ResultFailure, SourceIP: sourceIP, Changes: changes,
 	})
 	if err != nil {
-		s.log.ErrorContext(ctx, "audit team creation failure", "error", err)
+		s.log.ErrorContext(ctx, "audit team failure", "action", action, "error", err)
 	}
 }
