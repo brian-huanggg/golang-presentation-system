@@ -69,6 +69,16 @@ type AddTeamMemberRequest struct {
 	EmployeeId string `json:"employeeId"`
 }
 
+// AdminTeamPage defines model for AdminTeamPage.
+type AdminTeamPage struct {
+	Items []TeamSummary `json:"items"`
+	Page  int           `json:"page"`
+	Size  int           `json:"size"`
+
+	// Total Number of teams matching the filters, across all pages.
+	Total int64 `json:"total"`
+}
+
 // AwardCategory defines model for AwardCategory.
 type AwardCategory string
 
@@ -239,6 +249,21 @@ type TeamMember struct {
 // TeamMemberRole defines model for TeamMember.Role.
 type TeamMemberRole string
 
+// TeamSummary defines model for TeamSummary.
+type TeamSummary struct {
+	AwardCategory AwardCategory `json:"awardCategory"`
+	Department    Department    `json:"department"`
+	EventYear     int           `json:"eventYear"`
+	HasIdea       bool          `json:"hasIdea"`
+	Id            int64         `json:"id"`
+	Leader        TeamMember    `json:"leader"`
+
+	// MemberCount People on the team, leader included (1 to 5).
+	MemberCount int    `json:"memberCount"`
+	Name        string `json:"name"`
+	Track       Track  `json:"track"`
+}
+
 // Track defines model for Track.
 type Track string
 
@@ -256,6 +281,22 @@ type CsrfInvalid = Problem
 
 // RateLimited defines model for RateLimited.
 type RateLimited = Problem
+
+// ListAdminTeamsParams defines parameters for ListAdminTeams.
+type ListAdminTeamsParams struct {
+	Q             *string        `form:"q,omitempty" json:"q,omitempty"`
+	Track         *Track         `form:"track,omitempty" json:"track,omitempty"`
+	AwardCategory *AwardCategory `form:"awardCategory,omitempty" json:"awardCategory,omitempty"`
+	Department    *Department    `form:"department,omitempty" json:"department,omitempty"`
+	HasIdea       *bool          `form:"hasIdea,omitempty" json:"hasIdea,omitempty"`
+
+	// Page 1-based page number (default 1).
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// Size Page size, 1 to 100 (default 20).
+	Size *int    `form:"size,omitempty" json:"size,omitempty"`
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
+}
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
@@ -280,6 +321,9 @@ type AddTeamMemberJSONRequestBody = AddTeamMemberRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Admin lists and searches the teams of the current event year (ADM-001)
+	// (GET /admin/teams)
+	ListAdminTeams(c *gin.Context, params ListAdminTeamsParams)
 	// Log in with Employee ID and password (AUTH-001, AUTH-003, AUTH-005)
 	// (POST /auth/login)
 	Login(c *gin.Context)
@@ -304,12 +348,12 @@ type ServerInterface interface {
 	// Create a team with its roster, all or nothing (TEAM-001..008)
 	// (POST /teams)
 	CreateTeam(c *gin.Context)
-	// Upload the first file and create the team's Idea (IDEA-001..005, IDEA-010, IDEA-020)
-	// (POST /teams/{teamId}/idea)
-	CreateIdea(c *gin.Context, teamId TeamId)
 	// The Team Leader dissolves the team (TEAM-014, TEAM-015, TEAM-016)
 	// (DELETE /teams/{teamId})
 	DissolveTeam(c *gin.Context, teamId TeamId)
+	// Upload the first file and create the team's Idea (IDEA-001..005, IDEA-010, IDEA-020)
+	// (POST /teams/{teamId}/idea)
+	CreateIdea(c *gin.Context, teamId TeamId)
 	// A Team Member leaves their team (TEAM-012, TEAM-013)
 	// (POST /teams/{teamId}/leave)
 	LeaveTeam(c *gin.Context, teamId TeamId)
@@ -329,6 +373,90 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// ListAdminTeams operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminTeams(c *gin.Context) {
+
+	var err error
+
+	c.Set(SessionCookieScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminTeamsParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", c.Request.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter q: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "track" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "track", c.Request.URL.Query(), &params.Track)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter track: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "awardCategory" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "awardCategory", c.Request.URL.Query(), &params.AwardCategory)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter awardCategory: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "department" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "department", c.Request.URL.Query(), &params.Department)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter department: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "hasIdea" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "hasIdea", c.Request.URL.Query(), &params.HasIdea)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter hasIdea: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", c.Request.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter page: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "size" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "size", c.Request.URL.Query(), &params.Size)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter size: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", c.Request.URL.Query(), &params.Sort)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter sort: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListAdminTeams(c, params)
+}
 
 // Login operation middleware
 func (siw *ServerInterfaceWrapper) Login(c *gin.Context) {
@@ -448,13 +576,36 @@ func (siw *ServerInterfaceWrapper) CreateTeam(c *gin.Context) {
 	siw.Handler.CreateTeam(c)
 }
 
-<<<<<<< HEAD
-// CreateIdea operation middleware
-func (siw *ServerInterfaceWrapper) CreateIdea(c *gin.Context) {
-=======
 // DissolveTeam operation middleware
 func (siw *ServerInterfaceWrapper) DissolveTeam(c *gin.Context) {
->>>>>>> worktree-feat-CUR-64-soft-delete
+
+	var err error
+
+	// ------------- Path parameter "teamId" -------------
+	var teamId TeamId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "teamId", c.Param("teamId"), &teamId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter teamId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(CsrfTokenScopes, []string{})
+
+	c.Set(SessionCookieScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DissolveTeam(c, teamId)
+}
+
+// CreateIdea operation middleware
+func (siw *ServerInterfaceWrapper) CreateIdea(c *gin.Context) {
 
 	var err error
 
@@ -479,7 +630,6 @@ func (siw *ServerInterfaceWrapper) DissolveTeam(c *gin.Context) {
 	}
 
 	siw.Handler.CreateIdea(c, teamId)
-	siw.Handler.DissolveTeam(c, teamId)
 }
 
 // LeaveTeam operation middleware
@@ -602,6 +752,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
+	router.GET(options.BaseURL+"/admin/teams", wrapper.ListAdminTeams)
 	router.POST(options.BaseURL+"/auth/login", wrapper.Login)
 	router.POST(options.BaseURL+"/auth/logout", wrapper.Logout)
 	router.GET(options.BaseURL+"/auth/me", wrapper.GetCurrentUser)
@@ -610,8 +761,8 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 	router.POST(options.BaseURL+"/teams", wrapper.CreateTeam)
-	router.POST(options.BaseURL+"/teams/:teamId/idea", wrapper.CreateIdea)
 	router.DELETE(options.BaseURL+"/teams/:teamId", wrapper.DissolveTeam)
+	router.POST(options.BaseURL+"/teams/:teamId/idea", wrapper.CreateIdea)
 	router.POST(options.BaseURL+"/teams/:teamId/leave", wrapper.LeaveTeam)
 	router.POST(options.BaseURL+"/teams/:teamId/members", wrapper.AddTeamMember)
 	router.DELETE(options.BaseURL+"/teams/:teamId/members/:employeeId", wrapper.RemoveTeamMember)
