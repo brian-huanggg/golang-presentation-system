@@ -104,12 +104,19 @@ func validateRegister(in RegisterInput) (newUser, []platform.FieldError) {
 // checkPassword returns the field error codes for pw, or nil when acceptable.
 // Presence and the byte upper bound short-circuit, because the composition rules
 // (REG-005) are meaningless for an empty or oversized input and the bound exists
-// to avoid doing work on it. Shared with the password-change flow (REG-007).
+// to avoid doing work on it. The bound is checked on the raw input first (so we
+// never normalize something huge) and again after NFKC, which can expand text
+// (U+FDFA becomes 18 runes) and would otherwise inflate the hashing work.
+// Shared with the password-change flow (REG-007).
 func checkPassword(pw string) []string {
 	switch {
 	case pw == "":
 		return []string{fieldRequired}
 	case len(pw) > maxPasswordBytes:
+		return []string{fieldTooLong}
+	}
+	pw = normalizePassword(pw)
+	if len(pw) > maxPasswordBytes {
 		return []string{fieldTooLong}
 	}
 	return passwordViolations(pw)

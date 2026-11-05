@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -64,6 +65,14 @@ func TestREG_005_passwordViolations(t *testing.T) {
 		{"all lowercase digits repeat", "aaaaaaaaaaaa", []string{pwNoUpper, pwNoSymbol, pwRepeat}},
 		{"short symbol-only", "!!!", []string{pwTooShort, pwNoUpper, pwNoLower, pwRepeat}},
 
+		// Unicode: the policy is judged on the NFKC-normalized password, so
+		// full-width look-alikes cannot dodge the sequence / repeat rules.
+		{"full-width abc is a sequence", "Xk!ａｂｃQ4mW2zp", []string{pwSequence}},
+		{"full-width 123 is a sequence", "Xk!pQ１２３mWzqr", []string{pwSequence}},
+		{"full-width aaa is a repeat", "Xk!ａａａQ4mW2zp", []string{pwRepeat}},
+		{"decomposed é counts as one rune", "Xk9!pQ4#mW2e\u0301", nil},
+		{"11 runes stays too short once composed", "Ab!dEg@hIk" + "e\u0301", []string{pwTooShort}},
+
 		// AC-REG-005: contains bcd / xyz
 		{"AC-REG-005 Abcdef!Xyz12Q", "Abcdef!Xyz12Q", []string{pwSequence}},
 	}
@@ -98,6 +107,8 @@ func TestREG_005_checkPassword(t *testing.T) {
 		{"exactly 128 bytes is not too long", strings.Repeat("Xk9!pQ4#", 16), nil},
 		{"weak password reports every violation", "abc", []string{pwTooShort, pwNoUpper, pwNoSymbol, pwSequence}},
 		{"strong password passes", "Xk9!pQ4#mW2z", nil},
+		// NFKC can expand a short input a lot (U+FDFA -> 18 runes); the bound must hold after it.
+		{"expansion past 128 bytes is too long", strings.Repeat("\ufdfa", 40), []string{fieldTooLong}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -134,5 +145,43 @@ func TestREG_005_validateRegisterReportsEachViolation(t *testing.T) {
 	}
 	if !reflect.DeepEqual(errs, want) {
 		t.Fatalf("errs = %v, want %v", errs, want)
+	}
+}
+
+func TestREG_005_normalizePassword(t *testing.T) {
+	tests := []struct{ name, in, want string }{
+		{"ascii unchanged", "Xk9!pQ4#mW2z", "Xk9!pQ4#mW2z"},
+		{"full-width to ASCII", "ａｂｃ１２３", "abc123"},
+		{"NFD composed to NFC", "e\u0301", "\u00e9"},
+		{"CJK unchanged", "密碼", "密碼"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizePassword(tc.in); got != tc.want {
+				t.Errorf("normalizePassword(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// The password a user types must hash and verify the same however their input
+// method encodes it; otherwise a later login on another device would fail.
+func TestREG_005_hashIsNormalizationInsensitive(t *testing.T) {
+	h := NewArgon2idHasher()
+	phc, err := h.Hash(context.Background(), "Xk9!pQ4#mW2\u00e9") // NFC
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, pw := range map[string]string{
+		"NFC": "Xk9!pQ4#mW2\u00e9",
+		"NFD": "Xk9!pQ4#mW2e\u0301",
+	} {
+		ok, err := verifyPassword(pw, phc)
+		if err != nil || !ok {
+			t.Errorf("%s form should verify, got ok=%v err=%v", name, ok, err)
+		}
+	}
+	if ok, _ := verifyPassword("Xk9!pQ4#mW2e", phc); ok {
+		t.Error("a different password must not verify")
 	}
 }

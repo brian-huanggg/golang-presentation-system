@@ -3,6 +3,8 @@ package auth
 import (
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // minPasswordRunes is REG-005's minimum length. Counted in runes, not bytes, so a
@@ -20,10 +22,20 @@ const (
 	pwRepeat   = "password_repeat"
 )
 
+// normalizePassword applies NFKC. The policy is judged on, and the hash is made
+// from, this form so that (a) full-width look-alikes (ａｂｃ, １２３) cannot dodge
+// the sequence and repeat rules, and (b) the same text typed with a composed or
+// decomposed accent (é vs e+U+0301) hashes identically on every device. Hashing
+// and verification must both go through it.
+func normalizePassword(pw string) string {
+	return norm.NFKC.String(pw)
+}
+
 // passwordViolations returns the code of every REG-005 rule pw breaks, in a fixed
 // order, or nil when it complies. All rules are reported at once so the user can
 // fix the password in one round trip.
 func passwordViolations(pw string) []string {
+	pw = normalizePassword(pw)
 	var out []string
 	if utf8.RuneCountInString(pw) < minPasswordRunes {
 		out = append(out, pwTooShort)

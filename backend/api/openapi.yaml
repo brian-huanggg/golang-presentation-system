@@ -119,8 +119,9 @@ components:
           type: string
           format: password
           description: >
-            Password policy (REG-005): at least 12 characters (counted as Unicode
-            characters), at most 128 bytes; at least one uppercase letter, one
+            Password policy (REG-005): the password is Unicode NFKC-normalized first
+            (so full-width `ａｂｃ` equals `abc`), then must be at least 12
+            characters (counted as Unicode characters) and at most 128 bytes; at least one uppercase letter, one
             lowercase letter and one symbol (punctuation or symbol, not a space);
             no run of 3 or more consecutive ASCII letters or digits, ascending or
             descending, letters case-insensitive (`abc`, `cba`, `123`, `321`); no

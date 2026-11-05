@@ -52,7 +52,7 @@ func (h *Argon2idHasher) Hash(ctx context.Context, password string) (string, err
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("read salt: %w", err)
 	}
-	key := argon2.IDKey([]byte(password), salt, argonTime, argonMemoryKiB, argonThreads, argonKeyLen)
+	key := argon2.IDKey([]byte(normalizePassword(password)), salt, argonTime, argonMemoryKiB, argonThreads, argonKeyLen)
 	enc := base64.RawStdEncoding
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		argon2.Version, argonMemoryKiB, argonTime, argonThreads, enc.EncodeToString(salt), enc.EncodeToString(key)), nil
@@ -83,6 +83,6 @@ func verifyPassword(password, phc string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("bad hash: %w", err)
 	}
-	got := argon2.IDKey([]byte(password), salt, t, m, p, uint32(len(want)))
+	got := argon2.IDKey([]byte(normalizePassword(password)), salt, t, m, p, uint32(len(want)))
 	return subtle.ConstantTimeCompare(got, want) == 1, nil
 }
