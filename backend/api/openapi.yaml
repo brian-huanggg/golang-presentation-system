@@ -199,6 +199,53 @@ paths:
           $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
+  /teams:
+    post:
+      operationId: createTeam
+      summary: Create a team with its roster, all or nothing (TEAM-001..008)
+      description: >
+        Requires a session of a Participant who is not in a team this event year
+        (TEAM-001); the caller becomes the Team Leader. Admins get 403 `forbidden`
+        (R-02), a participant already in a team 409 `already_in_team`, and a request
+        after the deadline 403 `deadline_passed` (DDL-003).
+
+
+        The team's department is the leader's (TEAM-003). `memberIds` lists the other
+        members by Employee ID, 0 to 4 of them (TEAM-002, TEAM-006). Creation is
+        all-or-nothing (TEAM-008): when anything is invalid, no team is created and the
+        response is 400 `validation_failed` whose `errors` list every problem found. A
+        problem with a listed ID has `field` `memberIds`, the offending ID in `value`,
+        and one reason `code`: `invalid_format` (not 6 digits), `duplicate` (listed
+        twice), `is_leader` (the caller's own ID), `not_registered` (no such
+        Participant), `already_in_team` (already in a team this event year) or
+        `department_mismatch` (a different department from the leader, TEAM-007).
+        Other fields use `name` (`required`, `too_short`, `too_long`, `invalid_format`),
+        `track` and `awardCategory` (`required`, `invalid_value`) and `memberIds`
+        without a value (`too_many`). A name already used by an active team of this
+        year, compared case-insensitively, is 409 `team_name_taken` (TEAM-004).
+      tags: [team]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeamRequest"
+      responses:
+        "201":
+          description: Team created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     sessionCookie:
@@ -281,6 +328,11 @@ components:
         code:
           type: string
           description: Stable code, e.g. `required`, `invalid_format`, `too_long`.
+        value:
+          type: string
+          description: >
+            The offending input value, only when `field` is a list and the code
+            concerns one element (for example one Employee ID in `memberIds`).
     Department:
       type: string
       enum: [TSID, BCID, DEID, NTAD]
@@ -383,3 +435,59 @@ components:
         mustChangePassword:
           type: boolean
           description: True for a newly provisioned Admin until the password is changed (AUTH-008).
+    Track:
+      type: string
+      enum: [smart_innovation, sustainable_development]
+    AwardCategory:
+      type: string
+      enum: [engineering, administration, manufacturing_process, transportation, public_safety]
+    CreateTeamRequest:
+      type: object
+      required: [name, track, awardCategory]
+      properties:
+        name:
+          type: string
+          description: 2 to 50 characters after trimming (TEAM-004).
+        track:
+          $ref: "#/components/schemas/Track"
+        awardCategory:
+          $ref: "#/components/schemas/AwardCategory"
+        memberIds:
+          type: array
+          maxItems: 4
+          description: Employee IDs of the other members; empty or absent for a team of one (TEAM-002).
+          items:
+            type: string
+    TeamMember:
+      type: object
+      required: [employeeId, fullName, role]
+      properties:
+        employeeId:
+          type: string
+        fullName:
+          type: string
+        role:
+          type: string
+          enum: [LEADER, MEMBER]
+    Team:
+      type: object
+      required: [id, eventYear, name, track, awardCategory, department, members]
+      properties:
+        id:
+          type: integer
+          format: int64
+        eventYear:
+          type: integer
+        name:
+          type: string
+        track:
+          $ref: "#/components/schemas/Track"
+        awardCategory:
+          $ref: "#/components/schemas/AwardCategory"
+        department:
+          $ref: "#/components/schemas/Department"
+        members:
+          type: array
+          description: The leader first, then the members in the order they were listed.
+          items:
+            $ref: "#/components/schemas/TeamMember"

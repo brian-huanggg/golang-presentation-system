@@ -1,2 +1,2 @@
-// Package team covers teams and roster rules.
+// Package team covers teams and roster rules (TEAM-*).
 package team
