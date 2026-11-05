@@ -347,6 +347,71 @@ paths:
           $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
+  /teams/{teamId}/idea:
+    post:
+      operationId: createIdea
+      summary: Upload the first file and create the team's Idea (IDEA-001..005, IDEA-010, IDEA-020)
+      description: >
+        Only the Team Leader or an Admin can do this (IDEA-011). A Team Member gets 403
+        `forbidden`; a Participant outside the team, an unknown team and a dissolved team
+        all get 404 `team_not_found`, so other teams are not revealed. A team that already
+        has an Idea gets 409 `idea_exists`. After the deadline a Participant gets 403
+        `deadline_passed` (DDL-003); Admins are not restricted (DDL-006). The deadline is
+        judged when the upload completes, not when it started (DDL-005).
+
+
+        The body is `multipart/form-data` with the text fields `title` (required, at most
+        100 characters) and `summary` (optional, at most 1,000 characters) and exactly one
+        `file` part. Field problems are 400 `validation_failed` with one entry per field
+        in `errors` (`title` and `summary`: `required`, `too_long`; `file`:
+        `invalid_file_name`, `too_long`). A body that is not that form, or that ends
+        before it is complete, is 400 `invalid_request` and creates nothing (IDEA-006).
+
+
+        The file must be a PPTX or PDF of at most 5 MB whose extension, declared type and
+        content all agree (IDEA-002..004), and must pass the malware scan (IDEA-005). The
+        rejection reasons (IDEA-007) are the problem `code`: `upload_file_empty` (422),
+        `upload_file_too_large` (413), `upload_format_rejected` and
+        `upload_type_mismatch` (415), `upload_content_mismatch`, `upload_macro_rejected`
+        and `upload_malware_detected` (422), and `upload_scan_unavailable` (503, retry
+        later). Any rejection leaves no Idea, no version and no stored file.
+
+
+        On success the Idea has one version, number 1, and the response carries the
+        `ETag` to send as `If-Match` on later changes (IDEA-030).
+      tags: [idea]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/TeamId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CreateIdeaRequest"
+      responses:
+        "201":
+          description: Idea created with its first version
+          headers:
+            ETag:
+              description: Revision of the Idea, for `If-Match`.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Idea"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   parameters:
     TeamId:
@@ -607,3 +672,51 @@ components:
           description: The leader first, then the members in the order they were listed.
           items:
             $ref: "#/components/schemas/TeamMember"
+    CreateIdeaRequest:
+      type: object
+      required: [title, file]
+      properties:
+        title:
+          type: string
+          maxLength: 100
+        summary:
+          type: string
+          maxLength: 1000
+        file:
+          type: string
+          format: binary
+          description: A PPTX or PDF file of at most 5 MB.
+    IdeaVersion:
+      type: object
+      required: [versionNo, uploadedBy, uploadedAt, originalFileName, sizeBytes]
+      properties:
+        versionNo:
+          type: integer
+        uploadedBy:
+          type: string
+          description: Employee ID of the uploader.
+        uploadedAt:
+          type: string
+          description: ISO-8601 time with a `+08:00` offset (Asia/Taipei).
+        originalFileName:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+    Idea:
+      type: object
+      required: [id, teamId, title, summary, currentVersion]
+      properties:
+        id:
+          type: integer
+          format: int64
+        teamId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        summary:
+          type: string
+          description: Empty when none was given.
+        currentVersion:
+          $ref: "#/components/schemas/IdeaVersion"

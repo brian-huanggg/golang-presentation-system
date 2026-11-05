@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 const (
@@ -79,6 +80,14 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"newPassword"`
 }
 
+// CreateIdeaRequest defines model for CreateIdeaRequest.
+type CreateIdeaRequest struct {
+	// File A PPTX or PDF file of at most 5 MB.
+	File    openapi_types.File `json:"file"`
+	Summary *string            `json:"summary,omitempty"`
+	Title   string             `json:"title"`
+}
+
 // CreateTeamRequest defines model for CreateTeamRequest.
 type CreateTeamRequest struct {
 	AwardCategory AwardCategory `json:"awardCategory"`
@@ -113,6 +122,30 @@ type Health struct {
 
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
+
+// Idea defines model for Idea.
+type Idea struct {
+	CurrentVersion IdeaVersion `json:"currentVersion"`
+	Id             int64       `json:"id"`
+
+	// Summary Empty when none was given.
+	Summary string `json:"summary"`
+	TeamId  int64  `json:"teamId"`
+	Title   string `json:"title"`
+}
+
+// IdeaVersion defines model for IdeaVersion.
+type IdeaVersion struct {
+	OriginalFileName string `json:"originalFileName"`
+	SizeBytes        int64  `json:"sizeBytes"`
+
+	// UploadedAt ISO-8601 time with a `+08:00` offset (Asia/Taipei).
+	UploadedAt string `json:"uploadedAt"`
+
+	// UploadedBy Employee ID of the uploader.
+	UploadedBy string `json:"uploadedBy"`
+	VersionNo  int    `json:"versionNo"`
+}
 
 // Language BCP 47 tag offered by the UI (I18N-001).
 type Language string
@@ -239,6 +272,9 @@ type RegisterJSONRequestBody = RegisterRequest
 // CreateTeamJSONRequestBody defines body for CreateTeam for application/json ContentType.
 type CreateTeamJSONRequestBody = CreateTeamRequest
 
+// CreateIdeaMultipartRequestBody defines body for CreateIdea for multipart/form-data ContentType.
+type CreateIdeaMultipartRequestBody = CreateIdeaRequest
+
 // AddTeamMemberJSONRequestBody defines body for AddTeamMember for application/json ContentType.
 type AddTeamMemberJSONRequestBody = AddTeamMemberRequest
 
@@ -268,6 +304,9 @@ type ServerInterface interface {
 	// Create a team with its roster, all or nothing (TEAM-001..008)
 	// (POST /teams)
 	CreateTeam(c *gin.Context)
+	// Upload the first file and create the team's Idea (IDEA-001..005, IDEA-010, IDEA-020)
+	// (POST /teams/{teamId}/idea)
+	CreateIdea(c *gin.Context, teamId TeamId)
 	// A Team Member leaves their team (TEAM-012, TEAM-013)
 	// (POST /teams/{teamId}/leave)
 	LeaveTeam(c *gin.Context, teamId TeamId)
@@ -406,6 +445,34 @@ func (siw *ServerInterfaceWrapper) CreateTeam(c *gin.Context) {
 	siw.Handler.CreateTeam(c)
 }
 
+// CreateIdea operation middleware
+func (siw *ServerInterfaceWrapper) CreateIdea(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "teamId" -------------
+	var teamId TeamId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "teamId", c.Param("teamId"), &teamId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter teamId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(CsrfTokenScopes, []string{})
+
+	c.Set(SessionCookieScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateIdea(c, teamId)
+}
+
 // LeaveTeam operation middleware
 func (siw *ServerInterfaceWrapper) LeaveTeam(c *gin.Context) {
 
@@ -534,6 +601,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 	router.POST(options.BaseURL+"/teams", wrapper.CreateTeam)
+	router.POST(options.BaseURL+"/teams/:teamId/idea", wrapper.CreateIdea)
 	router.POST(options.BaseURL+"/teams/:teamId/leave", wrapper.LeaveTeam)
 	router.POST(options.BaseURL+"/teams/:teamId/members", wrapper.AddTeamMember)
 	router.DELETE(options.BaseURL+"/teams/:teamId/members/:employeeId", wrapper.RemoveTeamMember)
