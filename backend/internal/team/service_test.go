@@ -50,11 +50,12 @@ func (f *fakeEvent) CheckActor(isAdmin bool) error {
 type recorder struct {
 	inTx       []audit.Entry
 	standalone []audit.Entry
+	err        error // returned by Record, to test rollback
 }
 
 func (r *recorder) Record(_ context.Context, _ sqlx.ExecerContext, e audit.Entry) error {
 	r.inTx = append(r.inTx, e)
-	return nil
+	return r.err
 }
 func (r *recorder) RecordStandalone(_ context.Context, e audit.Entry) error {
 	r.standalone = append(r.standalone, e)

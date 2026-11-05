@@ -88,5 +88,48 @@
         "unexpected": "Something went wrong. Please try again later."
       }
     }
+  },
+  "catalog": {
+    "track": {
+      "smart_innovation": "Smart Innovation",
+      "sustainable_development": "Sustainable Development"
+    },
+    "award": {
+      "engineering": "Engineering",
+      "administration": "Administration",
+      "manufacturing_process": "Manufacturing Process",
+      "transportation": "Transportation",
+      "public_safety": "Public Safety"
+    }
+  },
+  "admin": {
+    "nav": "All teams",
+    "teams": {
+      "title": "All teams",
+      "search": "Team name",
+      "searchButton": "Search",
+      "reset": "Reset",
+      "track": "Track",
+      "award": "Award category",
+      "department": "Department",
+      "idea": "Idea",
+      "any": "All",
+      "ideaYes": "Has an Idea",
+      "ideaNo": "No Idea yet",
+      "colName": "Team",
+      "colLeader": "Leader",
+      "colMembers": "Members",
+      "colIdea": "Idea",
+      "hasIdea": "Yes",
+      "noIdea": "No",
+      "empty": "No teams match.",
+      "rowsPerPage": "Rows per page",
+      "displayedRows": "{{from}}–{{to}} of {{count}}",
+      "forbidden": "Only Admins can view this page.",
+      "problems": {
+        "validation_failed": "One of the filters is not valid.",
+        "unexpected": "Something went wrong. Please try again later."
+      }
+    }
   }
 }

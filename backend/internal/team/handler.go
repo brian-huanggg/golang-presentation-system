@@ -95,6 +95,39 @@ func (h *Handler) DissolveTeam(c *gin.Context, teamID api.TeamId) {
 	c.Status(http.StatusNoContent)
 }
 
+// ListAdminTeams handles GET /admin/teams (ADM-001).
+func (h *Handler) ListAdminTeams(c *gin.Context, params api.ListAdminTeamsParams) {
+	in := AdminListInput{Q: params.Q, HasIdea: params.HasIdea, Page: params.Page, Size: params.Size, Sort: params.Sort}
+	if params.Track != nil {
+		v := string(*params.Track)
+		in.Track = &v
+	}
+	if params.AwardCategory != nil {
+		v := string(*params.AwardCategory)
+		in.AwardCategory = &v
+	}
+	if params.Department != nil {
+		v := string(*params.Department)
+		in.Department = &v
+	}
+	page, err := h.svc.ListForAdmin(c.Request.Context(), in, c.ClientIP())
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	items := make([]api.TeamSummary, 0, len(page.Items))
+	for _, t := range page.Items {
+		items = append(items, api.TeamSummary{
+			Id: t.ID, EventYear: t.EventYear, Name: t.Name, Track: api.Track(t.Track),
+			AwardCategory: api.AwardCategory(t.AwardCategory), Department: api.Department(t.Department),
+			Leader:      api.TeamMember{EmployeeId: t.LeaderID, FullName: t.LeaderName, Role: api.TeamMemberRole(RoleLeader)},
+			MemberCount: t.MemberCount, HasIdea: t.HasIdea,
+		})
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, api.AdminTeamPage{Items: items, Total: page.Total, Page: page.Page, Size: page.Size})
+}
+
 func toAPITeam(t Team) api.Team {
 	members := make([]api.TeamMember, 0, len(t.Members))
 	for _, m := range t.Members {

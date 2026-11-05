@@ -199,6 +199,74 @@ paths:
           $ref: "#/components/responses/RateLimited"
         default:
           $ref: "#/components/responses/Problem"
+  /admin/teams:
+    get:
+      operationId: listAdminTeams
+      summary: Admin lists and searches the teams of the current event year (ADM-001)
+      description: >
+        Requires the session of an Admin; anyone else gets 403 `forbidden`. Admins are
+        not restricted by the deadline (DDL-006). Dissolved teams are never listed
+        (TEAM-015). All filters are optional and combine with AND.
+
+
+        `q` matches the team name as a case-insensitive substring. `track`,
+        `awardCategory` and `department` match exactly. `hasIdea` is `true` for teams
+        with an active Idea and `false` for teams without one. `sort` is one of `id`,
+        `-id`, `name`, `-name` (a leading `-` means descending; default `id`). An
+        invalid filter or paging value is 400 `validation_failed` with the parameter
+        name in `field`.
+
+
+        The listing is a view of other teams and is audited (AUD-001) as
+        `admin.team_list` with the filters used.
+      tags: [admin]
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 50
+        - name: track
+          in: query
+          schema:
+            $ref: "#/components/schemas/Track"
+        - name: awardCategory
+          in: query
+          schema:
+            $ref: "#/components/schemas/AwardCategory"
+        - name: department
+          in: query
+          schema:
+            $ref: "#/components/schemas/Department"
+        - name: hasIdea
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          description: 1-based page number (default 1).
+          schema:
+            type: integer
+        - name: size
+          in: query
+          description: Page size, 1 to 100 (default 20).
+          schema:
+            type: integer
+        - name: sort
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One page of teams
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminTeamPage"
+        default:
+          $ref: "#/components/responses/Problem"
   /teams:
     post:
       operationId: createTeam
@@ -771,6 +839,46 @@ components:
           description: The leader first, then the members in the order they were listed.
           items:
             $ref: "#/components/schemas/TeamMember"
+    TeamSummary:
+      type: object
+      required: [id, eventYear, name, track, awardCategory, department, leader, memberCount, hasIdea]
+      properties:
+        id:
+          type: integer
+          format: int64
+        eventYear:
+          type: integer
+        name:
+          type: string
+        track:
+          $ref: "#/components/schemas/Track"
+        awardCategory:
+          $ref: "#/components/schemas/AwardCategory"
+        department:
+          $ref: "#/components/schemas/Department"
+        leader:
+          $ref: "#/components/schemas/TeamMember"
+        memberCount:
+          type: integer
+          description: People on the team, leader included (1 to 5).
+        hasIdea:
+          type: boolean
+    AdminTeamPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamSummary"
+        total:
+          type: integer
+          format: int64
+          description: Number of teams matching the filters, across all pages.
+        page:
+          type: integer
+        size:
+          type: integer
     CreateIdeaRequest:
       type: object
       required: [title, file]

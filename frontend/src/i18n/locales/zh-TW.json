@@ -88,5 +88,48 @@
         "unexpected": "發生錯誤，請稍後再試。"
       }
     }
+  },
+  "catalog": {
+    "track": {
+      "smart_innovation": "智慧創新",
+      "sustainable_development": "永續發展"
+    },
+    "award": {
+      "engineering": "工程",
+      "administration": "行政",
+      "manufacturing_process": "製程",
+      "transportation": "運輸",
+      "public_safety": "公安"
+    }
+  },
+  "admin": {
+    "nav": "所有團隊",
+    "teams": {
+      "title": "所有團隊",
+      "search": "團隊名稱",
+      "searchButton": "搜尋",
+      "reset": "重設",
+      "track": "報名類型",
+      "award": "獎項",
+      "department": "部門",
+      "idea": "提案",
+      "any": "全部",
+      "ideaYes": "已有提案",
+      "ideaNo": "尚無提案",
+      "colName": "團隊",
+      "colLeader": "組長",
+      "colMembers": "人數",
+      "colIdea": "提案",
+      "hasIdea": "有",
+      "noIdea": "無",
+      "empty": "沒有符合的團隊。",
+      "rowsPerPage": "每頁筆數",
+      "displayedRows": "第 {{from}}–{{to}} 筆，共 {{count}} 筆",
+      "forbidden": "僅管理員可檢視此頁。",
+      "problems": {
+        "validation_failed": "其中一個篩選條件無效。",
+        "unexpected": "發生錯誤，請稍後再試。"
+      }
+    }
   }
 }

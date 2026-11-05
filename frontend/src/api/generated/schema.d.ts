@@ -125,6 +125,164 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin lists and searches the teams of the current event year (ADM-001)
+         * @description Requires the session of an Admin; anyone else gets 403 `forbidden`. Admins are not restricted by the deadline (DDL-006). Dissolved teams are never listed (TEAM-015). All filters are optional and combine with AND.
+         *
+         *     `q` matches the team name as a case-insensitive substring. `track`, `awardCategory` and `department` match exactly. `hasIdea` is `true` for teams with an active Idea and `false` for teams without one. `sort` is one of `id`, `-id`, `name`, `-name` (a leading `-` means descending; default `id`). An invalid filter or paging value is 400 `validation_failed` with the parameter name in `field`.
+         *
+         *     The listing is a view of other teams and is audited (AUD-001) as `admin.team_list` with the filters used.
+         */
+        get: operations["listAdminTeams"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a team with its roster, all or nothing (TEAM-001..008)
+         * @description Requires a session of a Participant who is not in a team this event year (TEAM-001); the caller becomes the Team Leader. Admins get 403 `forbidden` (R-02), a participant already in a team 409 `already_in_team`, and a request after the deadline 403 `deadline_passed` (DDL-003).
+         *
+         *     The team's department is the leader's (TEAM-003). `memberIds` lists the other members by Employee ID, 0 to 4 of them (TEAM-002, TEAM-006). Creation is all-or-nothing (TEAM-008): when anything is invalid, no team is created and the response is 400 `validation_failed` whose `errors` list every problem found. A problem with a listed ID has `field` `memberIds`, the offending ID in `value`, and one reason `code`: `invalid_format` (not 6 digits), `duplicate` (listed twice), `is_leader` (the caller's own ID), `not_registered` (no such Participant), `already_in_team` (already in a team this event year) or `department_mismatch` (a different department from the leader, TEAM-007). Other fields use `name` (`required`, `too_short`, `too_long`, `invalid_format`), `track` and `awardCategory` (`required`, `invalid_value`) and `memberIds` without a value (`too_many`). A name already used by an active team of this year, compared case-insensitively, is 409 `team_name_taken` (TEAM-004).
+         */
+        post: operations["createTeam"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{teamId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * The Team Leader dissolves the team (TEAM-014, TEAM-015, TEAM-016)
+         * @description Requires the session of the Team Leader of this team. The team is soft-deleted: hidden at once, its members are released at once, its name is free for reuse at once, and its Idea (if any) is soft-deleted with it. The data is removed for good by `cmd/purge` after 7 days. The former roster is kept in the audit record so an engineer can restore the team by hand within that time (TEAM-016); the API offers no restore. The confirmation of NFR-UX-003 is asked by the UI before this call; the API itself takes no confirmation field.
+         *
+         *     A plain Team Member gets 403 `forbidden` (they can leave instead). A Participant who is not in the team gets 404 `team_not_found`; an Admin gets 403 `forbidden` (R-02). After the deadline the answer is 403 `deadline_passed` (DDL-003).
+         */
+        delete: operations["dissolveTeam"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{teamId}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Leader adds a member by Employee ID (TEAM-010, TEAM-007, TEAM-006)
+         * @description Requires the session of the Team Leader of this team. A Participant who is not in the team gets 404 `team_not_found`; a Team Member who is not the leader gets 403 `forbidden`; an Admin gets 403 `forbidden` (R-02, ADM-005). After the deadline the answer is 403 `deadline_passed` (DDL-003).
+         *
+         *     The person is checked exactly as at creation (TEAM-007). Anything wrong is 400 `validation_failed` with one error: `field` `employeeId`, the ID in `value` and a `code` of `invalid_format`, `is_leader`, `not_registered`, `already_in_team` (in this or another team this event year) or `department_mismatch`. A team that already has 5 people is 409 `team_full` (TEAM-006). The response is the whole team.
+         */
+        post: operations["addTeamMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{teamId}/members/{employeeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Leader removes a member (TEAM-011)
+         * @description Requires the session of the Team Leader of this team; the same 404, 403 and `deadline_passed` answers as adding a member. The confirmation of NFR-UX-003 is asked by the UI before this call; the API itself takes no confirmation field. The leader cannot be removed (TEAM-013): 409 `leader_cannot_be_removed`. An Employee ID that is not in the team is 404 `member_not_found`. The person is free at once and can join or create another team.
+         */
+        delete: operations["removeTeamMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{teamId}/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A Team Member leaves their team (TEAM-012, TEAM-013)
+         * @description Requires the session of a plain Team Member of this team. The person is free at once and can join or create another team. The confirmation of NFR-UX-003 is asked by the UI before this call; the API itself takes no confirmation field.
+         *
+         *     The Team Leader cannot leave (TEAM-013): 409 `leader_cannot_leave`; the leader dissolves the team instead. A Participant who is not in the team gets 404 `team_not_found`; an Admin gets 403 `forbidden` (R-02). After the deadline the answer is 403 `deadline_passed` (DDL-003).
+         */
+        post: operations["leaveTeam"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{teamId}/idea": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload the first file and create the team's Idea (IDEA-001..005, IDEA-010, IDEA-020)
+         * @description Only the Team Leader or an Admin can do this (IDEA-011). A Team Member gets 403 `forbidden`; a Participant outside the team, an unknown team and a dissolved team all get 404 `team_not_found`, so other teams are not revealed. A team that already has an Idea gets 409 `idea_exists`. After the deadline a Participant gets 403 `deadline_passed` (DDL-003); Admins are not restricted (DDL-006). The deadline is judged when the upload completes, not when it started (DDL-005).
+         *
+         *     The body is `multipart/form-data` with the text fields `title` (required, at most 100 characters) and `summary` (optional, at most 1,000 characters) and exactly one `file` part. Field problems are 400 `validation_failed` with one entry per field in `errors` (`title` and `summary`: `required`, `too_long`; `file`: `invalid_file_name`, `too_long`). A body that is not that form, or that ends before it is complete, is 400 `invalid_request` and creates nothing (IDEA-006).
+         *
+         *     The file must be a PPTX or PDF of at most 5 MB whose extension, declared type and content all agree (IDEA-002..004), and must pass the malware scan (IDEA-005). The rejection reasons (IDEA-007) are the problem `code`: `upload_file_empty` (422), `upload_file_too_large` (413), `upload_format_rejected` and `upload_type_mismatch` (415), `upload_content_mismatch`, `upload_macro_rejected` and `upload_malware_detected` (422), and `upload_scan_unavailable` (503, retry later). Any rejection leaves no Idea, no version and no stored file.
+         *
+         *     On success the Idea has one version, number 1, and the response carries the `ETag` to send as `If-Match` on later changes (IDEA-030).
+         */
+        post: operations["createIdea"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -148,6 +306,8 @@ export interface components {
             field: string;
             /** @description Stable code, e.g. `required`, `invalid_format`, `too_long`. */
             code: string;
+            /** @description The offending input value, only when `field` is a list and the code concerns one element (for example one Employee ID in `memberIds`). */
+            value?: string;
         };
         /** @enum {string} */
         Department: "TSID" | "BCID" | "DEID" | "NTAD";
@@ -206,6 +366,91 @@ export interface components {
             /** @description True for a newly provisioned Admin until the password is changed (AUTH-008). */
             mustChangePassword: boolean;
         };
+        /** @enum {string} */
+        Track: "smart_innovation" | "sustainable_development";
+        /** @enum {string} */
+        AwardCategory: "engineering" | "administration" | "manufacturing_process" | "transportation" | "public_safety";
+        CreateTeamRequest: {
+            /** @description 2 to 50 characters after trimming (TEAM-004). */
+            name: string;
+            track: components["schemas"]["Track"];
+            awardCategory: components["schemas"]["AwardCategory"];
+            /** @description Employee IDs of the other members; empty or absent for a team of one (TEAM-002). */
+            memberIds?: string[];
+        };
+        AddTeamMemberRequest: {
+            /** @description Employee ID of the person to add (6 digits). */
+            employeeId: string;
+        };
+        TeamMember: {
+            employeeId: string;
+            fullName: string;
+            /** @enum {string} */
+            role: "LEADER" | "MEMBER";
+        };
+        Team: {
+            /** Format: int64 */
+            id: number;
+            eventYear: number;
+            name: string;
+            track: components["schemas"]["Track"];
+            awardCategory: components["schemas"]["AwardCategory"];
+            department: components["schemas"]["Department"];
+            /** @description The leader first, then the members in the order they were listed. */
+            members: components["schemas"]["TeamMember"][];
+        };
+        TeamSummary: {
+            /** Format: int64 */
+            id: number;
+            eventYear: number;
+            name: string;
+            track: components["schemas"]["Track"];
+            awardCategory: components["schemas"]["AwardCategory"];
+            department: components["schemas"]["Department"];
+            leader: components["schemas"]["TeamMember"];
+            /** @description People on the team, leader included (1 to 5). */
+            memberCount: number;
+            hasIdea: boolean;
+        };
+        AdminTeamPage: {
+            items: components["schemas"]["TeamSummary"][];
+            /**
+             * Format: int64
+             * @description Number of teams matching the filters, across all pages.
+             */
+            total: number;
+            page: number;
+            size: number;
+        };
+        CreateIdeaRequest: {
+            title: string;
+            summary?: string;
+            /**
+             * Format: binary
+             * @description A PPTX or PDF file of at most 5 MB.
+             */
+            file: string;
+        };
+        IdeaVersion: {
+            versionNo: number;
+            /** @description Employee ID of the uploader. */
+            uploadedBy: string;
+            /** @description ISO-8601 time with a `+08:00` offset (Asia/Taipei). */
+            uploadedAt: string;
+            originalFileName: string;
+            /** Format: int64 */
+            sizeBytes: number;
+        };
+        Idea: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            teamId: number;
+            title: string;
+            /** @description Empty when none was given. */
+            summary: string;
+            currentVersion: components["schemas"]["IdeaVersion"];
+        };
     };
     responses: {
         /** @description Too many requests from this network address (AUTH-004). Applies to every `/auth/*` operation, independent of the per-account lockout. Code `rate_limited`. */
@@ -238,7 +483,9 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        TeamId: number;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -419,6 +666,196 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdminTeams: {
+        parameters: {
+            query?: {
+                q?: string;
+                track?: components["schemas"]["Track"];
+                awardCategory?: components["schemas"]["AwardCategory"];
+                department?: components["schemas"]["Department"];
+                hasIdea?: boolean;
+                /** @description 1-based page number (default 1). */
+                page?: number;
+                /** @description Page size, 1 to 100 (default 20). */
+                size?: number;
+                sort?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of teams */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTeamPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamRequest"];
+            };
+        };
+        responses: {
+            /** @description Team created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            403: components["responses"]["CsrfInvalid"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    dissolveTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Team dissolved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["CsrfInvalid"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    addTeamMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddTeamMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description Member added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            403: components["responses"]["CsrfInvalid"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    removeTeamMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Member removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["CsrfInvalid"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    leaveTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left the team */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["CsrfInvalid"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    createIdea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teamId: components["parameters"]["TeamId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["CreateIdeaRequest"];
+            };
+        };
+        responses: {
+            /** @description Idea created with its first version */
+            201: {
+                headers: {
+                    /** @description Revision of the Idea, for `If-Match`. */
+                    ETag?: string;
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Idea"];
+                };
+            };
+            403: components["responses"]["CsrfInvalid"];
             429: components["responses"]["RateLimited"];
             default: components["responses"]["Problem"];
         };
