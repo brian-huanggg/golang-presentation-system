@@ -13,6 +13,9 @@ const (
 	CodeForbidden        = "forbidden"
 	CodeTeamNotFound     = "team_not_found"
 	CodeIdeaExists       = "idea_exists"
+	CodeIdeaNotFound     = "idea_not_found"
+	CodeIdeaChanged      = "idea_changed"
+	CodePreconditionReq  = "precondition_required"
 )
 
 // Field problem codes and names for validation_failed.
@@ -26,9 +29,10 @@ const (
 )
 
 const (
-	roleAdmin    = "ADMIN"
-	targetIdea   = "idea"
-	actionUpload = "idea.upload"
+	roleAdmin     = "ADMIN"
+	targetIdea    = "idea"
+	actionUpload  = "idea.upload"
+	actionReplace = "idea.replace"
 )
 
 // ErrValidation is a 400 carrying one entry per invalid field.
@@ -65,4 +69,22 @@ func ErrTeamNotFound() *platform.Problem {
 // creates it; later files replace the file of the existing Idea.
 func ErrIdeaExists() *platform.Problem {
 	return platform.NewProblem(http.StatusConflict, CodeIdeaExists, "The team already has an Idea.")
+}
+
+// ErrIdeaNotFound is a 404 for an unknown or deleted Idea, and for one that belongs to a
+// team the caller is not on (the same reasoning as ErrTeamNotFound).
+func ErrIdeaNotFound() *platform.Problem {
+	return platform.NewProblem(http.StatusNotFound, CodeIdeaNotFound, "The Idea was not found.")
+}
+
+// ErrIdeaChanged is a 412: the Idea was updated after the caller opened it (IDEA-030).
+func ErrIdeaChanged() *platform.Problem {
+	return platform.NewProblem(http.StatusPreconditionFailed, CodeIdeaChanged,
+		"Someone else has updated the Idea. Reload it and try again.")
+}
+
+// ErrPreconditionRequired is a 428: changing the Idea needs the ETag in If-Match.
+func ErrPreconditionRequired() *platform.Problem {
+	return platform.NewProblem(http.StatusPreconditionRequired, CodePreconditionReq,
+		"The If-Match header with the Idea's ETag is required.")
 }

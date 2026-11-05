@@ -164,7 +164,7 @@ func newFixture(t *testing.T, actor Actor, memberships ...team.Membership) *fixt
 		f.teams.scripted = []team.Membership{asLeader}
 	}
 	f.svc = NewService(sqlx.NewDb(raw, "mysql"), fakeIdentity{actor: actor}, f.teams, f.event,
-		&upload.Pipeline{Scanner: scannerFunc(func(ctx context.Context, d []byte) error { return f.scanFn.Scan(ctx, d) }), Store: f.store, Log: quiet()},
+		&upload.Pipeline{Scanner: scannerFunc(func(ctx context.Context, d []byte) error { return f.scanFn.Scan(ctx, d) }), Store: f.store, Log: quiet()}, f.store,
 		f.rec, platform.NewManualClock(time.Date(2026, 11, 5, 4, 0, 0, 0, time.UTC)), quiet())
 	return f
 }

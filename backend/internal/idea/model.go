@@ -4,8 +4,11 @@ import "time"
 
 // Limits from IDEA-010 and the idea / idea_version column sizes (migration 000006).
 const (
-	maxTitleRunes    = 100
-	maxSummaryRunes  = 1000
+	maxTitleRunes   = 100
+	maxSummaryRunes = 1000
+	// MaxVersions is how many versions an Idea keeps (IDEA-021).
+	MaxVersions = 10
+
 	maxFileNameRunes = 255 // idea_version.original_file_name VARCHAR(255); longer names are rejected
 )
 
@@ -27,6 +30,15 @@ type UploadInput struct {
 	FileName    string // as sent by the client; reduced to a plain name before storing
 	ContentType string // declared type of the file part
 	Data        []byte // the whole file; already bounded by the handler
+}
+
+// ReplaceInput is a request to replace the Idea's file with a new version.
+type ReplaceInput struct {
+	IdeaID           int64
+	ExpectedRevision int64 // from If-Match (IDEA-030)
+	FileName         string
+	ContentType      string
+	Data             []byte // nil means the form had no file part
 }
 
 // Version is one stored revision of the Idea file (IDEA-020).

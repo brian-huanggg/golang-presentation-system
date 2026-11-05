@@ -52,6 +52,12 @@ type Acceptor interface {
 		commit func(ctx context.Context, res upload.Result) error) (upload.Result, error)
 }
 
+// ObjectRemover deletes stored files. *upload.MinIO satisfies it; idea needs it to drop the
+// files of versions trimmed beyond MaxVersions (IDEA-021).
+type ObjectRemover interface {
+	Delete(ctx context.Context, key string) error
+}
+
 // Service holds the Idea business rules. Construct it once in main.go.
 type Service struct {
 	db     *sqlx.DB
@@ -59,14 +65,15 @@ type Service struct {
 	teams  TeamReader
 	event  EventPolicy
 	files  Acceptor
+	remove ObjectRemover
 	audit  Auditor
 	clock  platform.Clock
 	logger *slog.Logger
 }
 
-func NewService(db *sqlx.DB, ident Identity, teams TeamReader, event EventPolicy, files Acceptor,
+func NewService(db *sqlx.DB, ident Identity, teams TeamReader, event EventPolicy, files Acceptor, remove ObjectRemover,
 	auditor Auditor, clock platform.Clock, log *slog.Logger) *Service {
-	return &Service{db: db, ident: ident, teams: teams, event: event, files: files, audit: auditor, clock: clock, logger: log}
+	return &Service{db: db, ident: ident, teams: teams, event: event, files: files, remove: remove, audit: auditor, clock: clock, logger: log}
 }
 
 // UploadFirst creates the team's Idea with its first file as version 1 (IDEA-001, IDEA-010,
@@ -87,7 +94,7 @@ func (s *Service) UploadFirst(ctx context.Context, in UploadInput, sourceIP stri
 	reject := func(err error) (Idea, error) {
 		var p *platform.Problem
 		if errors.As(err, &p) {
-			s.auditFailure(ctx, actor, in.TeamID, sourceIP, p)
+			s.auditFailure(ctx, actor, actionUpload, "", in.TeamID, sourceIP, p)
 		}
 		return Idea{}, err
 	}
@@ -211,19 +218,22 @@ func (s *Service) createInTx(ctx context.Context, tx *sqlx.Tx, actor Actor, team
 // auditFailure records a refused upload. It runs after the transaction rolled back, so the
 // record is not lost with it. A failure to write it is logged and does not change the
 // answer the caller gets.
-func (s *Service) auditFailure(ctx context.Context, actor Actor, teamID int64, sourceIP string, p *platform.Problem) {
-	changes := map[string]any{"reason": p.Code, "teamId": teamID}
+func (s *Service) auditFailure(ctx context.Context, actor Actor, action, targetID string, teamID int64, sourceIP string, p *platform.Problem) {
+	changes := map[string]any{"reason": p.Code}
+	if teamID != 0 {
+		changes["teamId"] = teamID
+	}
 	if len(p.Errors) > 0 {
 		// Field and code only; the title and summary are arbitrary text and stay out.
 		changes["errors"] = p.Errors
 	}
 	err := s.audit.RecordStandalone(ctx, audit.Entry{
 		ActorEmployeeID: actor.EmployeeID, ActorRole: actor.Role,
-		Action: actionUpload, TargetType: targetIdea,
+		Action: action, TargetType: targetIdea, TargetID: targetID,
 		Result: audit.ResultFailure, SourceIP: sourceIP, Changes: changes,
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "audit idea upload failure", "error", err)
+		s.logger.ErrorContext(ctx, "audit idea failure", "action", action, "error", err)
 	}
 }
 

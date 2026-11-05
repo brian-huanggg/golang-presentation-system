@@ -2,6 +2,7 @@ package idea
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -82,4 +83,91 @@ func insertVersion(ctx context.Context, tx sqlx.ExecerContext, v newVersion) err
 func isDuplicateOn(err error, key string) bool {
 	var me *mysql.MySQLError
 	return errors.As(err, &me) && me.Number == mysqlDuplicateEntry && strings.Contains(me.Message, key)
+}
+
+// errIdeaGone: no active Idea with that id (never existed, or soft-deleted).
+var errIdeaGone = errors.New("idea not found")
+
+// errStaleRevision: the Idea's revision no longer matches the caller's (IDEA-030).
+var errStaleRevision = errors.New("idea revision changed")
+
+// ideaRow is the part of an Idea that replacing its file needs.
+type ideaRow struct {
+	TeamID           int64  `db:"team_id"`
+	Title            string `db:"title"`
+	Summary          string `db:"summary"`
+	CurrentVersionNo int    `db:"current_version_no"`
+	Revision         int64  `db:"version"`
+}
+
+// teamOfIdea reads the owning team without locking, so authorisation can lock the team
+// first and the Idea second, the same order as creation.
+func teamOfIdea(ctx context.Context, q sqlx.QueryerContext, ideaID int64) (int64, error) {
+	var teamID int64
+	err := sqlx.GetContext(ctx, q, &teamID, "SELECT team_id FROM idea WHERE id = ? AND deleted_at IS NULL", ideaID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, errIdeaGone
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read idea team: %w", err)
+	}
+	return teamID, nil
+}
+
+// lockIdea reads the active Idea and holds its row until the transaction ends.
+func lockIdea(ctx context.Context, tx sqlx.QueryerContext, ideaID int64) (ideaRow, error) {
+	var r ideaRow
+	err := sqlx.GetContext(ctx, tx, &r,
+		"SELECT team_id, title, summary, current_version_no, version FROM idea WHERE id = ? AND deleted_at IS NULL FOR UPDATE", ideaID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ideaRow{}, errIdeaGone
+	}
+	if err != nil {
+		return ideaRow{}, fmt.Errorf("lock idea: %w", err)
+	}
+	return r, nil
+}
+
+// advanceIdea points the Idea at its new latest version and bumps the revision (IDEA-024,
+// IDEA-030). Zero affected rows means the revision moved.
+func advanceIdea(ctx context.Context, tx sqlx.ExecerContext, ideaID int64, revision int64, versionNo int) error {
+	res, err := tx.ExecContext(ctx,
+		"UPDATE idea SET current_version_no = ?, version = version + 1 WHERE id = ? AND version = ?",
+		versionNo, ideaID, revision)
+	if err != nil {
+		return fmt.Errorf("advance idea: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("advance idea: %w", err)
+	}
+	if n == 0 {
+		return errStaleRevision
+	}
+	return nil
+}
+
+// trimmedVersion is a version that fell out of the retention window.
+type trimmedVersion struct {
+	No        int    `db:"version_no"`
+	ObjectKey string `db:"object_key"`
+}
+
+// trimVersions deletes every version numbered at or below cutoff and returns them, so the
+// caller can remove their objects after the commit (IDEA-021). Numbers are never reused,
+// so "at or below latest-10" is exactly "the oldest beyond the ten kept".
+func trimVersions(ctx context.Context, tx sqlx.ExtContext, ideaID int64, cutoff int) ([]trimmedVersion, error) {
+	var old []trimmedVersion
+	err := sqlx.SelectContext(ctx, tx, &old,
+		"SELECT version_no, object_key FROM idea_version WHERE idea_id = ? AND version_no <= ? ORDER BY version_no", ideaID, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("select old versions: %w", err)
+	}
+	if len(old) == 0 {
+		return nil, nil
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM idea_version WHERE idea_id = ? AND version_no <= ?", ideaID, cutoff); err != nil {
+		return nil, fmt.Errorf("delete old versions: %w", err)
+	}
+	return old, nil
 }

@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -49,6 +50,44 @@ func (h *Handler) CreateIdea(c *gin.Context, teamID int64) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("ETag", etag(created.Revision))
 	c.JSON(http.StatusCreated, toAPIIdea(created))
+}
+
+// ReplaceIdeaFile handles PUT /ideas/{ideaId}/file.
+func (h *Handler) ReplaceIdeaFile(c *gin.Context, ideaID int64, params api.ReplaceIdeaFileParams) {
+	if params.IfMatch == nil || strings.TrimSpace(*params.IfMatch) == "" {
+		h.fail(c, ErrPreconditionRequired())
+		return
+	}
+	rev, ok := parseETag(*params.IfMatch)
+	if !ok {
+		h.fail(c, ErrInvalidRequest())
+		return
+	}
+	in, err := readUploadForm(c)
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	replaced, err := h.svc.ReplaceFile(c.Request.Context(), ReplaceInput{
+		IdeaID: ideaID, ExpectedRevision: rev,
+		FileName: in.FileName, ContentType: in.ContentType, Data: in.Data,
+	}, c.ClientIP())
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Header("ETag", etag(replaced.Revision))
+	c.JSON(http.StatusOK, toAPIIdea(replaced))
+}
+
+// parseETag reads the revision out of an If-Match value: a strong or weak ETag as sent
+// by etag(). Lists and "*" are not supported and count as invalid.
+func parseETag(v string) (int64, bool) {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "W/")
+	v = strings.Trim(v, `"`)
+	n, err := strconv.ParseInt(v, 10, 64)
+	return n, err == nil && n > 0
 }
 
 // readUploadForm reads the multipart body into memory. The whole file is held in memory
