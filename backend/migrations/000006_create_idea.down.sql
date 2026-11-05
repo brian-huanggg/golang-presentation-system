@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS idea_version;
+DROP TABLE IF EXISTS idea;

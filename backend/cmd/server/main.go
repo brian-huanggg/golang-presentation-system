@@ -22,8 +22,10 @@ import (
 	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/audit"
 	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/auth"
 	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/event"
+	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/idea"
 	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/platform"
 	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/team"
+	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/upload"
 )
 
 // apiBase must match `servers` in api/openapi.yaml.
@@ -42,13 +44,27 @@ func main() {
 type server struct {
 	*authHandler
 	*teamHandler
+	*ideaHandler
 }
 
 // Aliases give the embedded fields distinct names; both packages call their type Handler.
 type (
 	authHandler = auth.Handler
 	teamHandler = team.Handler
+	ideaHandler = idea.Handler
 )
+
+// ideaIdentity adapts auth's session user to idea's Actor: idea may not import auth
+// (ADR 0003), so the translation lives here with the other wiring.
+type ideaIdentity struct{ auth *auth.Service }
+
+func (i ideaIdentity) CurrentUser(ctx context.Context) (idea.Actor, error) {
+	u, err := i.auth.CurrentUser(ctx)
+	if err != nil {
+		return idea.Actor{}, err
+	}
+	return idea.Actor{EmployeeID: u.EmployeeID, Role: u.Role}, nil
+}
 
 func (server) GetHealth(c *gin.Context) { c.JSON(http.StatusOK, api.Health{Status: api.Ok}) }
 
@@ -88,7 +104,30 @@ func run() error {
 
 	authSvc := auth.NewService(db, policy, auth.NewArgon2idHasher(), sessions, recorder, clock, log)
 	teamSvc := team.NewService(db, authSvc, policy, recorder, log)
-	srv := server{authHandler: auth.NewHandler(authSvc, log), teamHandler: team.NewHandler(teamSvc, log)}
+
+	// Idea files: scanned by ClamAV, stored in MinIO. Both must be reachable at start so a
+	// misconfigured deploy fails now and not on the first upload (IDEA-005).
+	objects, err := upload.NewMinIO(cfg.MinIO.Endpoint, cfg.MinIO.AccessKey, cfg.MinIO.SecretKey, cfg.MinIO.Bucket, cfg.MinIO.UseSSL)
+	if err != nil {
+		return fmt.Errorf("object store: %w", err)
+	}
+	depsCtx, cancelDeps := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelDeps()
+	if err := objects.EnsureBucket(depsCtx); err != nil {
+		return fmt.Errorf("object store (%s): %w", cfg.MinIO, err)
+	}
+	scanner := upload.ClamAV{Addr: cfg.ClamAVAddr}
+	if err := scanner.Ping(depsCtx); err != nil {
+		return fmt.Errorf("clamd (%s): %w", cfg.ClamAVAddr, err)
+	}
+	pipeline := &upload.Pipeline{Scanner: scanner, Store: objects, Log: log}
+	ideaSvc := idea.NewService(db, ideaIdentity{auth: authSvc}, teamSvc, policy, pipeline, recorder, clock, log)
+
+	srv := server{
+		authHandler: auth.NewHandler(authSvc, log),
+		teamHandler: team.NewHandler(teamSvc, log),
+		ideaHandler: idea.NewHandler(ideaSvc, log),
+	}
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()

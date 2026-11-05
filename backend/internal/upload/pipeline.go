@@ -30,6 +30,16 @@ const compensationTimeout = 10 * time.Second
 // to the store unless validation and the scan both pass.
 func (p *Pipeline) Accept(ctx context.Context, filename, declaredType string, data []byte,
 	commit func(ctx context.Context, res Result) error) (Result, error) {
+	return p.AcceptWith(ctx, filename, declaredType, data, nil, commit)
+}
+
+// AcceptWith is Accept with a check between the scan and the store. The scan can take
+// seconds, so a caller whose rules depend on time (the deadline, DDL-005) re-checks them
+// here instead of writing an object that is certain to be refused. beforeStore may be
+// nil; when it returns an error, nothing is stored and that error is returned as is.
+func (p *Pipeline) AcceptWith(ctx context.Context, filename, declaredType string, data []byte,
+	beforeStore func(ctx context.Context) error,
+	commit func(ctx context.Context, res Result) error) (Result, error) {
 
 	kind, err := Validate(filename, declaredType, data)
 	if err != nil {
@@ -40,6 +50,11 @@ func (p *Pipeline) Accept(ctx context.Context, filename, declaredType string, da
 			p.log().Warn("upload rejected: malware", "err", err)
 		}
 		return Result{}, err
+	}
+	if beforeStore != nil {
+		if err := beforeStore(ctx); err != nil {
+			return Result{}, err
+		}
 	}
 	key, err := NewKey()
 	if err != nil {
@@ -75,4 +90,3 @@ func (p *Pipeline) log() *slog.Logger {
 	}
 	return slog.Default()
 }
-
