@@ -45,3 +45,10 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
   }
   return result.data;
 }
+
+/** Like unwrap, for 204 responses that have no body. */
+export function unwrapEmpty(result: { error?: unknown; response: Response }): void {
+  if (result.error !== undefined || !result.response.ok) {
+    throw new ApiError(result.response.status, result.error as Problem | undefined);
+  }
+}

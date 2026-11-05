@@ -31,10 +31,70 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Register a Participant account (REG-001..003, REG-006, REG-009)
+         * Register a Participant account (REG-001..003, REG-005, REG-006, REG-009)
          * @description Open to visitors. Rejected with 403 `deadline_passed` after the event deadline (REG-006), 400 `validation_failed` with per-field codes for invalid input, and 409 `employee_id_taken` when the Employee ID is already registered (REG-003; disclosure is accepted by REG-009).
          */
         post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log in with Employee ID and password (AUTH-001, AUTH-003, AUTH-005)
+         * @description Open to visitors; allowed after the deadline (DDL-004). Email is never a login identifier (AUTH-001). Every credential failure (unknown ID, wrong password, malformed ID) is the same 401 `invalid_credentials` so the response never reveals whether an account exists (AUTH-003). On success the response sets the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) and the session token is renewed to prevent fixation.
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log out and invalidate the session immediately (AUTH-006)
+         * @description Idempotent: a request without a live session also returns 204, so a client whose session already expired can still finish logging out. The session is deleted from the server store before the response, and the cookie is cleared.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The logged-in user, or 401 when the session is missing or expired (AUTH-005)
+         * @description A session expires after 30 minutes of inactivity or 8 hours in total, whichever comes first; each authenticated request restarts the idle timer but never the 8 hour limit. An expired or unknown session is `401 unauthenticated`.
+         */
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -77,7 +137,10 @@ export interface components {
             employeeId: string;
             fullName: string;
             department: components["schemas"]["Department"];
-            /** Format: password */
+            /**
+             * Format: password
+             * @description Password policy (REG-005): the password is Unicode NFKC-normalized first (so full-width `ａｂｃ` equals `abc`), then must be at least 12 characters (counted as Unicode characters) and at most 128 bytes; at least one uppercase letter, one lowercase letter and one symbol (punctuation or symbol, not a space); no run of 3 or more consecutive ASCII letters or digits, ascending or descending, letters case-insensitive (`abc`, `cba`, `123`, `321`); no character repeated 3 or more times in a row (`aaa`, `111`). Every violated rule is returned as its own `validation_failed` entry with field `password` and one of the codes `required`, `too_long`, `password_too_short`, `password_no_upper`, `password_no_lower`, `password_no_symbol`, `password_sequence`, `password_repeat`.
+             */
             password: string;
             preferredLanguage: components["schemas"]["Language"];
             /** @description Optional; format-checked only, never verified or unique (REG-008). */
@@ -89,6 +152,23 @@ export interface components {
             department: components["schemas"]["Department"];
             preferredLanguage: components["schemas"]["Language"];
             email?: string;
+        };
+        LoginRequest: {
+            /** @description The 6-digit Employee ID. An email address is not accepted. */
+            employeeId: string;
+            /** Format: password */
+            password: string;
+        };
+        SessionUser: {
+            employeeId: string;
+            fullName: string;
+            /** @enum {string} */
+            role: "PARTICIPANT" | "ADMIN";
+            /** @description Absent for Admin accounts. */
+            department?: components["schemas"]["Department"];
+            preferredLanguage: components["schemas"]["Language"];
+            /** @description True for a newly provisioned Admin until the password is changed (AUTH-008). */
+            mustChangePassword: boolean;
         };
     };
     responses: {
@@ -150,6 +230,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegisteredUser"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Logged in; the session cookie is set */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionUser"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No live session remains */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionUser"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -48,7 +48,80 @@ paths:
                 $ref: "#/components/schemas/RegisteredUser"
         default:
           $ref: "#/components/responses/Problem"
+  /auth/login:
+    post:
+      operationId: login
+      summary: Log in with Employee ID and password (AUTH-001, AUTH-003, AUTH-005)
+      description: >
+        Open to visitors; allowed after the deadline (DDL-004). Email is never a login
+        identifier (AUTH-001). Every credential failure (unknown ID, wrong password,
+        malformed ID) is the same 401 `invalid_credentials` so the response never
+        reveals whether an account exists (AUTH-003). On success the response sets the
+        session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) and the session token is
+        renewed to prevent fixation.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in; the session cookie is set
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        default:
+          $ref: "#/components/responses/Problem"
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Log out and invalidate the session immediately (AUTH-006)
+      description: >
+        Idempotent: a request without a live session also returns 204, so a client
+        whose session already expired can still finish logging out. The session is
+        deleted from the server store before the response, and the cookie is cleared.
+      tags: [auth]
+      security: []
+      responses:
+        "204":
+          description: No live session remains
+        default:
+          $ref: "#/components/responses/Problem"
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      summary: The logged-in user, or 401 when the session is missing or expired (AUTH-005)
+      description: >
+        A session expires after 30 minutes of inactivity or 8 hours in total,
+        whichever comes first; each authenticated request restarts the idle timer but
+        never the 8 hour limit. An expired or unknown session is `401 unauthenticated`.
+      tags: [auth]
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: The current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: esg_session
+      description: Opaque server-side session token (HttpOnly; the SPA never reads it).
   responses:
     Problem:
       description: RFC 9457 Problem Details
@@ -150,3 +223,32 @@ components:
           $ref: "#/components/schemas/Language"
         email:
           type: string
+    LoginRequest:
+      type: object
+      required: [employeeId, password]
+      properties:
+        employeeId:
+          type: string
+          description: The 6-digit Employee ID. An email address is not accepted.
+        password:
+          type: string
+          format: password
+    SessionUser:
+      type: object
+      required: [employeeId, fullName, role, preferredLanguage, mustChangePassword]
+      properties:
+        employeeId:
+          type: string
+        fullName:
+          type: string
+        role:
+          type: string
+          enum: [PARTICIPANT, ADMIN]
+        department:
+          $ref: "#/components/schemas/Department"
+          description: Absent for Admin accounts.
+        preferredLanguage:
+          $ref: "#/components/schemas/Language"
+        mustChangePassword:
+          type: boolean
+          description: True for a newly provisioned Admin until the password is changed (AUTH-008).

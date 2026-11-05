@@ -33,6 +33,9 @@ type fakeHasher struct{ err error }
 
 func (h fakeHasher) Hash(context.Context, string) (string, error) { return "HASH", h.err }
 
+// Verify is never reached by the registration tests; the login tests use the real hasher.
+func (h fakeHasher) Verify(context.Context, string, string) (bool, error) { return false, h.err }
+
 // recorder captures audit entries; inside-tx ones are executed on the tx so sqlmock sees them.
 type recorder struct {
 	inTx       []audit.Entry
@@ -56,7 +59,7 @@ func newSvc(t *testing.T, gate DeadlineGate, h Hasher) (*Service, sqlmock.Sqlmoc
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = raw.Close() })
 	rec := &recorder{}
-	return NewService(sqlx.NewDb(raw, "mysql"), gate, h, rec, quiet()), mock, rec
+	return NewService(sqlx.NewDb(raw, "mysql"), gate, h, nil, rec, quiet()), mock, rec
 }
 
 func validInput() RegisterInput {

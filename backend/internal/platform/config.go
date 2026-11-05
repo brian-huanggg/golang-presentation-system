@@ -25,6 +25,11 @@ type Config struct {
 	// EventYear and EventDeadline come from configuration, not the database (ADR 0014).
 	EventYear     int
 	EventDeadline time.Time
+
+	// SessionIdleTimeout and SessionLifetime are AUTH-005 (30 minutes idle, 8 hours
+	// absolute); configurable only so tests and staging can shorten them (ADR 0007).
+	SessionIdleTimeout time.Duration
+	SessionLifetime    time.Duration
 }
 
 type DBConfig struct {
@@ -119,6 +124,19 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, err)
 	}
 	c.EventDeadline = deadline
+
+	duration := func(key, def string) time.Duration {
+		d, err := time.ParseDuration(get(key, def))
+		if err != nil || d <= 0 {
+			errs = append(errs, fmt.Errorf("%s must be a positive duration such as 30m", key))
+		}
+		return d
+	}
+	c.SessionIdleTimeout = duration("SESSION_IDLE_TIMEOUT", "30m")
+	c.SessionLifetime = duration("SESSION_LIFETIME", "8h")
+	if c.SessionIdleTimeout > 0 && c.SessionLifetime > 0 && c.SessionIdleTimeout > c.SessionLifetime {
+		errs = append(errs, errors.New("SESSION_IDLE_TIMEOUT must not exceed SESSION_LIFETIME"))
+	}
 
 	return c, errors.Join(errs...)
 }

@@ -11,6 +11,8 @@ const (
 	CodeValidationFailed = "validation_failed"
 	CodeInvalidRequest   = "invalid_request"
 	CodeEmployeeIDTaken  = "employee_id_taken"
+	CodeInvalidCreds     = "invalid_credentials"
+	CodeUnauthenticated  = "unauthenticated"
 )
 
 // ErrValidation is a 400 carrying one entry per invalid field.
@@ -29,4 +31,15 @@ func ErrInvalidRequest() *platform.Problem {
 // because there is no email channel to tell the owner; login never does (AUTH-003).
 func ErrEmployeeIDTaken() *platform.Problem {
 	return platform.NewProblem(http.StatusConflict, CodeEmployeeIDTaken, "This Employee ID is already registered.")
+}
+
+// ErrInvalidCredentials is the only login failure a client ever sees (AUTH-003):
+// unknown ID, wrong password and malformed ID are indistinguishable.
+func ErrInvalidCredentials() *platform.Problem {
+	return platform.NewProblem(http.StatusUnauthorized, CodeInvalidCreds, "Invalid Employee ID or password")
+}
+
+// ErrUnauthenticated is a 401 for a missing, expired or destroyed session (AUTH-005).
+func ErrUnauthenticated() *platform.Problem {
+	return platform.NewProblem(http.StatusUnauthorized, CodeUnauthenticated, "Authentication is required.")
 }

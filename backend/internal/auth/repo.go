@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -38,4 +39,41 @@ func insertUser(ctx context.Context, tx sqlx.ExecerContext, u newUser, passwordH
 		return fmt.Errorf("insert user: %w", err)
 	}
 	return nil
+}
+
+// userRow is the subset of `user` that login and the session need.
+type userRow struct {
+	ID                 int64          `db:"id"`
+	EmployeeID         string         `db:"employee_id"`
+	FullName           string         `db:"full_name"`
+	Department         sql.NullString `db:"department"`
+	Role               string         `db:"role"`
+	PreferredLanguage  string         `db:"preferred_language"`
+	PasswordHash       string         `db:"password_hash"`
+	MustChangePassword bool           `db:"must_change_password"`
+}
+
+const selectUserCols = "SELECT id, employee_id, full_name, department, role, preferred_language, password_hash, must_change_password FROM `user` "
+
+// errUserNotFound means no row matched; callers decide how much to reveal.
+var errUserNotFound = errors.New("user not found")
+
+func findUserByEmployeeID(ctx context.Context, q sqlx.QueryerContext, employeeID string) (userRow, error) {
+	return findUser(ctx, q, selectUserCols+"WHERE employee_id = ?", employeeID)
+}
+
+func findUserByID(ctx context.Context, q sqlx.QueryerContext, id int64) (userRow, error) {
+	return findUser(ctx, q, selectUserCols+"WHERE id = ?", id)
+}
+
+func findUser(ctx context.Context, q sqlx.QueryerContext, query string, arg any) (userRow, error) {
+	var u userRow
+	err := sqlx.GetContext(ctx, q, &u, query, arg)
+	if errors.Is(err, sql.ErrNoRows) {
+		return userRow{}, errUserNotFound
+	}
+	if err != nil {
+		return userRow{}, fmt.Errorf("find user: %w", err)
+	}
+	return u, nil
 }

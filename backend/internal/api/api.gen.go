@@ -7,6 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	SessionCookieScopes = "sessionCookie.Scopes"
+)
+
 // Defines values for Department.
 const (
 	BCID Department = "BCID"
@@ -24,6 +28,12 @@ const (
 const (
 	En   Language = "en"
 	ZhTW Language = "zh-TW"
+)
+
+// Defines values for SessionUserRole.
+const (
+	ADMIN       SessionUserRole = "ADMIN"
+	PARTICIPANT SessionUserRole = "PARTICIPANT"
 )
 
 // Department defines model for Department.
@@ -48,6 +58,13 @@ type HealthStatus string
 
 // Language BCP 47 tag offered by the UI (I18N-001).
 type Language string
+
+// LoginRequest defines model for LoginRequest.
+type LoginRequest struct {
+	// EmployeeId The 6-digit Employee ID. An email address is not accepted.
+	EmployeeId string `json:"employeeId"`
+	Password   string `json:"password"`
+}
 
 // Problem defines model for Problem.
 type Problem struct {
@@ -91,11 +108,40 @@ type RegisteredUser struct {
 	PreferredLanguage Language `json:"preferredLanguage"`
 }
 
+// SessionUser defines model for SessionUser.
+type SessionUser struct {
+	Department *Department `json:"department,omitempty"`
+	EmployeeId string      `json:"employeeId"`
+	FullName   string      `json:"fullName"`
+
+	// MustChangePassword True for a newly provisioned Admin until the password is changed (AUTH-008).
+	MustChangePassword bool `json:"mustChangePassword"`
+
+	// PreferredLanguage BCP 47 tag offered by the UI (I18N-001).
+	PreferredLanguage Language        `json:"preferredLanguage"`
+	Role              SessionUserRole `json:"role"`
+}
+
+// SessionUserRole defines model for SessionUser.Role.
+type SessionUserRole string
+
+// LoginJSONRequestBody defines body for Login for application/json ContentType.
+type LoginJSONRequestBody = LoginRequest
+
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Log in with Employee ID and password (AUTH-001, AUTH-003, AUTH-005)
+	// (POST /auth/login)
+	Login(c *gin.Context)
+	// Log out and invalidate the session immediately (AUTH-006)
+	// (POST /auth/logout)
+	Logout(c *gin.Context)
+	// The logged-in user, or 401 when the session is missing or expired (AUTH-005)
+	// (GET /auth/me)
+	GetCurrentUser(c *gin.Context)
 	// Register a Participant account (REG-001..003, REG-005, REG-006, REG-009)
 	// (POST /auth/register)
 	Register(c *gin.Context)
@@ -112,6 +158,47 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// Login operation middleware
+func (siw *ServerInterfaceWrapper) Login(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.Login(c)
+}
+
+// Logout operation middleware
+func (siw *ServerInterfaceWrapper) Logout(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.Logout(c)
+}
+
+// GetCurrentUser operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentUser(c *gin.Context) {
+
+	c.Set(SessionCookieScopes, []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetCurrentUser(c)
+}
 
 // Register operation middleware
 func (siw *ServerInterfaceWrapper) Register(c *gin.Context) {
@@ -166,6 +253,9 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
+	router.POST(options.BaseURL+"/auth/login", wrapper.Login)
+	router.POST(options.BaseURL+"/auth/logout", wrapper.Logout)
+	router.GET(options.BaseURL+"/auth/me", wrapper.GetCurrentUser)
 	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 }

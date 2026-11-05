@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/jmoiron/sqlx"
@@ -13,8 +14,11 @@ import (
 
 const (
 	actionRegister  = "auth.register"
+	actionLogin     = "auth.login"
+	actionLogout    = "auth.logout"
 	targetUser      = "user"
 	roleParticipant = "PARTICIPANT"
+	roleAdmin       = "ADMIN"
 )
 
 // DeadlineGate answers "may a participant write now?". It is defined here, at the
@@ -29,17 +33,39 @@ type Auditor interface {
 	RecordStandalone(ctx context.Context, e audit.Entry) error
 }
 
-// Service holds the auth business rules. Construct it once in main.go.
-type Service struct {
-	db     *sqlx.DB
-	gate   DeadlineGate
-	hasher Hasher
-	audit  Auditor
-	log    *slog.Logger
+// Sessions is the part of *scs.SessionManager that auth uses (ADR 0007), so the
+// store can change without touching the service and tests can fake it.
+type Sessions interface {
+	RenewToken(ctx context.Context) error
+	Put(ctx context.Context, key string, val any)
+	GetInt64(ctx context.Context, key string) int64
+	GetString(ctx context.Context, key string) string
+	Destroy(ctx context.Context) error
 }
 
-func NewService(db *sqlx.DB, gate DeadlineGate, hasher Hasher, auditor Auditor, log *slog.Logger) *Service {
-	return &Service{db: db, gate: gate, hasher: hasher, audit: auditor, log: log}
+// Service holds the auth business rules. Construct it once in main.go.
+type Service struct {
+	db       *sqlx.DB
+	gate     DeadlineGate
+	hasher   Hasher
+	sessions Sessions
+	audit    Auditor
+	log      *slog.Logger
+	// dummyHash is verified against when the Employee ID is unknown, so an unknown
+	// account costs the same time as a wrong password (AUTH-003: no timing oracle).
+	dummyHash string
+}
+
+func NewService(db *sqlx.DB, gate DeadlineGate, hasher Hasher, sessions Sessions, auditor Auditor, log *slog.Logger) *Service {
+	s := &Service{db: db, gate: gate, hasher: hasher, sessions: sessions, audit: auditor, log: log}
+	// Hashed once at startup with the current parameters. If this fails the unknown-ID
+	// path degrades to a fast mismatch; log it rather than refuse to start.
+	h, err := hasher.Hash(context.Background(), "timing-equalizer-not-a-real-password")
+	if err != nil {
+		log.Error("compute dummy hash; login timing for unknown IDs is not equalized", "error", err)
+	}
+	s.dummyHash = h
+	return s
 }
 
 // RegisteredUser is what a successful registration returns. It never carries the hash.
@@ -118,5 +144,145 @@ func (s *Service) auditFailure(ctx context.Context, claimedID, sourceIP, reason 
 	}
 	if err := s.audit.RecordStandalone(ctx, e); err != nil {
 		s.log.ErrorContext(ctx, "audit registration failure", "error", err)
+	}
+}
+
+// SessionUser is the identity returned by login and /auth/me. It never carries the hash.
+type SessionUser struct {
+	EmployeeID         string
+	FullName           string
+	Role               string
+	Department         string // "" for Admin
+	PreferredLanguage  string
+	MustChangePassword bool
+}
+
+func toSessionUser(u userRow) SessionUser {
+	return SessionUser{
+		EmployeeID: u.EmployeeID, FullName: u.FullName, Role: u.Role,
+		Department: u.Department.String, PreferredLanguage: u.PreferredLanguage,
+		MustChangePassword: u.MustChangePassword,
+	}
+}
+
+// Login authenticates by Employee ID and password and starts a session
+// (AUTH-001, AUTH-003, AUTH-005). It is open after the deadline (DDL-004), so it
+// does not consult the DeadlineGate. Every credential failure returns the same
+// ErrInvalidCredentials; the real reason goes only to the audit trail.
+//
+// The session is created in the request's scs context; scs persists it when the
+// response is written, so a failure here leaves no session behind.
+func (s *Service) Login(ctx context.Context, employeeID, password, sourceIP string) (SessionUser, error) {
+	id, err := platform.ParseEmployeeID(employeeID)
+	if err != nil {
+		// Not 6 digits: an email address lands here, which is how AUTH-001 is enforced.
+		s.auditLoginFailure(ctx, "", sourceIP, "invalid_employee_id")
+		return SessionUser{}, ErrInvalidCredentials()
+	}
+
+	row, err := findUserByEmployeeID(ctx, s.db, id.String())
+	switch {
+	case errors.Is(err, errUserNotFound):
+		// Burn the same Argon2id time as a real check before answering.
+		if _, verr := s.hasher.Verify(ctx, password, s.dummyHash); verr != nil && ctx.Err() != nil {
+			return SessionUser{}, verr
+		}
+		s.auditLoginFailure(ctx, id.String(), sourceIP, "unknown_user")
+		return SessionUser{}, ErrInvalidCredentials()
+	case err != nil:
+		return SessionUser{}, err
+	}
+
+	ok, err := s.hasher.Verify(ctx, password, row.PasswordHash)
+	if err != nil {
+		// A stored hash we cannot parse is our bug, not the caller's mistake.
+		return SessionUser{}, fmt.Errorf("verify password for user %d: %w", row.ID, err)
+	}
+	if !ok {
+		s.auditLoginFailure(ctx, id.String(), sourceIP, "bad_password")
+		return SessionUser{}, ErrInvalidCredentials()
+	}
+
+	// Fixation defence: a new token (and a fresh 8 h deadline) for the authenticated session.
+	if err := s.sessions.RenewToken(ctx); err != nil {
+		return SessionUser{}, fmt.Errorf("renew session token: %w", err)
+	}
+	s.sessions.Put(ctx, keyUserID, row.ID)
+	s.sessions.Put(ctx, keyEmployeeID, row.EmployeeID)
+	s.sessions.Put(ctx, keyRole, row.Role)
+
+	if err := s.audit.RecordStandalone(ctx, audit.Entry{
+		ActorEmployeeID: row.EmployeeID, ActorRole: row.Role, Action: actionLogin,
+		TargetType: targetUser, TargetID: row.EmployeeID,
+		Result: audit.ResultSuccess, SourceIP: sourceIP,
+	}); err != nil {
+		// AUD-001 wants every login recorded: fail closed rather than hand out an unaudited session.
+		if derr := s.sessions.Destroy(ctx); derr != nil {
+			s.log.ErrorContext(ctx, "destroy session after audit failure", "error", derr)
+		}
+		return SessionUser{}, fmt.Errorf("audit login: %w", err)
+	}
+	return toSessionUser(row), nil
+}
+
+// Logout ends the caller's session (AUTH-006). Destroy deletes it from the store
+// before returning, so the old token is dead on the next request. It is
+// idempotent: with no live session it does nothing and records nothing.
+func (s *Service) Logout(ctx context.Context, sourceIP string) error {
+	empID, role := s.sessions.GetString(ctx, keyEmployeeID), s.sessions.GetString(ctx, keyRole)
+	if s.sessions.GetInt64(ctx, keyUserID) == 0 {
+		return nil
+	}
+	if err := s.sessions.Destroy(ctx); err != nil {
+		return fmt.Errorf("destroy session: %w", err)
+	}
+	// Invalidation already happened, so a failed audit write is logged, not surfaced:
+	// the user must never be left logged in because the log table hiccuped.
+	if err := s.audit.RecordStandalone(ctx, audit.Entry{
+		ActorEmployeeID: empID, ActorRole: role, Action: actionLogout,
+		TargetType: targetUser, TargetID: empID,
+		Result: audit.ResultSuccess, SourceIP: sourceIP,
+	}); err != nil {
+		s.log.ErrorContext(ctx, "audit logout", "error", err)
+	}
+	return nil
+}
+
+// CurrentUser returns the logged-in user from the session, re-read from the
+// database so a changed name or language is never stale. It answers
+// ErrUnauthenticated when there is no live session (expired sessions are simply
+// absent from the store, so scs hands back an empty one).
+func (s *Service) CurrentUser(ctx context.Context) (SessionUser, error) {
+	uid := s.sessions.GetInt64(ctx, keyUserID)
+	if uid == 0 {
+		return SessionUser{}, ErrUnauthenticated()
+	}
+	row, err := findUserByID(ctx, s.db, uid)
+	if errors.Is(err, errUserNotFound) {
+		// The account vanished (engineer deleted it): the session must not outlive it.
+		if derr := s.sessions.Destroy(ctx); derr != nil {
+			s.log.ErrorContext(ctx, "destroy session of missing user", "error", derr)
+		}
+		return SessionUser{}, ErrUnauthenticated()
+	}
+	if err != nil {
+		return SessionUser{}, err
+	}
+	return toSessionUser(row), nil
+}
+
+// auditLoginFailure records a rejected login. claimedID is empty when the input was
+// not a well-formed Employee ID, keeping arbitrary text out of the log table. A
+// write failure is logged and does not change the generic answer (AUTH-003).
+func (s *Service) auditLoginFailure(ctx context.Context, claimedID, sourceIP, reason string) {
+	e := audit.Entry{
+		Action: actionLogin, Result: audit.ResultFailure, SourceIP: sourceIP,
+		Changes: map[string]any{"reason": reason},
+	}
+	if claimedID != "" {
+		e.TargetType, e.TargetID = targetUser, claimedID
+	}
+	if err := s.audit.RecordStandalone(ctx, e); err != nil {
+		s.log.ErrorContext(ctx, "audit login failure", "error", err)
 	}
 }

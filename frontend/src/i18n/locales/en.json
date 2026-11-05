@@ -38,6 +38,22 @@
         "invalid_request": "The request could not be understood. Please check the form and try again.",
         "unexpected": "Something went wrong. Please try again later."
       }
+    },
+    "login": {
+      "title": "Log in",
+      "employeeId": "Employee ID",
+      "employeeIdInvalid": "Enter your 6-digit Employee ID. Email addresses cannot be used to log in.",
+      "password": "Password",
+      "submit": "Log in",
+      "toRegister": "No account yet? Register",
+      "problems": {
+        "invalid_credentials": "Invalid Employee ID or password.",
+        "unexpected": "Something went wrong. Please try again later."
+      }
+    },
+    "logout": {
+      "button": "Log out",
+      "signedInAs": "{{name}}"
     }
   }
 }

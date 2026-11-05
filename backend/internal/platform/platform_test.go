@@ -35,6 +35,32 @@ func TestLoad_Valid(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 12, 31, 15, 59, 59, 0, time.UTC), c.EventDeadline)
 	assert.Equal(t, ":8080", c.HTTPAddr)
 	assert.Equal(t, 3306, c.DB.Port)
+	assert.Equal(t, 30*time.Minute, c.SessionIdleTimeout, "AUTH-005 default")
+	assert.Equal(t, 8*time.Hour, c.SessionLifetime, "AUTH-005 default")
+}
+
+func TestLoad_SessionTimeouts(t *testing.T) {
+	m := validEnv()
+	m["SESSION_IDLE_TIMEOUT"], m["SESSION_LIFETIME"] = "5m", "1h"
+	c, err := load(m)
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Minute, c.SessionIdleTimeout)
+	assert.Equal(t, time.Hour, c.SessionLifetime)
+
+	for name, kv := range map[string][2]string{
+		"garbage":         {"SESSION_IDLE_TIMEOUT", "soon"},
+		"zero":            {"SESSION_LIFETIME", "0s"},
+		"negative":        {"SESSION_IDLE_TIMEOUT", "-1m"},
+		"idle > lifetime": {"SESSION_IDLE_TIMEOUT", "9h"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := validEnv()
+			m[kv[0]] = kv[1]
+			_, err := load(m)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "SESSION_")
+		})
+	}
 }
 
 func TestLoad_ReportsAllProblems(t *testing.T) {
