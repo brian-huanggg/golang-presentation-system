@@ -17,7 +17,8 @@ export default defineConfig({
       {
         text: 'Features',
         items: [
-          { text: 'Platform 基礎設施', link: '/platform-foundation' }
+          { text: 'Platform 基礎設施', link: '/platform-foundation' },
+          { text: 'Audit 套件', link: '/audit-recorder' }
         ]
       }
     ],
