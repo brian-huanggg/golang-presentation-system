@@ -52,7 +52,7 @@ export interface paths {
         put?: never;
         /**
          * Log in with Employee ID and password (AUTH-001, AUTH-003, AUTH-005)
-         * @description Open to visitors; allowed after the deadline (DDL-004). Email is never a login identifier (AUTH-001). Every credential failure (unknown ID, wrong password, malformed ID) is the same 401 `invalid_credentials` so the response never reveals whether an account exists (AUTH-003). On success the response sets the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) and the session token is renewed to prevent fixation.
+         * @description Open to visitors; allowed after the deadline (DDL-004). Email is never a login identifier (AUTH-001). Every credential failure (unknown ID, wrong password, malformed ID, locked account) is the same 401 `invalid_credentials` so the response never reveals whether an account exists or is locked (AUTH-003). Five consecutive wrong passwords lock the account for 5 minutes (AUTH-002); while locked even the correct password is refused with the same response. On success the response sets the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) and the session token is renewed to prevent fixation. It also sets the readable `csrf_token` cookie (`Secure`, `SameSite=Lax`, not `HttpOnly`) whose value the SPA must echo in the `X-CSRF-Token` header on every later state-changing request (AUTH-009).
          */
         post: operations["login"];
         delete?: never;
@@ -72,7 +72,7 @@ export interface paths {
         put?: never;
         /**
          * Log out and invalidate the session immediately (AUTH-006)
-         * @description Idempotent: a request without a live session also returns 204, so a client whose session already expired can still finish logging out. The session is deleted from the server store before the response, and the cookie is cleared.
+         * @description Idempotent: a request without a live session also returns 204, so a client whose session already expired can still finish logging out. The session is deleted from the server store before the response, and the session and `csrf_token` cookies are cleared. With a live session the request must carry the `X-CSRF-Token` header (AUTH-009); without one no token exists and none is checked.
          */
         post: operations["logout"];
         delete?: never;
@@ -172,6 +172,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description The request belongs to a logged-in session but its `X-CSRF-Token` header is missing or does not equal the session's token (AUTH-009). Code `csrf_token_invalid`. Applies to every state-changing operation that needs a session; the handler does not run. */
+        CsrfInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description RFC 9457 Problem Details */
         Problem: {
             headers: {
@@ -277,6 +286,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["CsrfInvalid"];
             default: components["responses"]["Problem"];
         };
     };

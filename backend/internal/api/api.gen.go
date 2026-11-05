@@ -125,6 +125,9 @@ type SessionUser struct {
 // SessionUserRole defines model for SessionUser.Role.
 type SessionUserRole string
 
+// CsrfInvalid defines model for CsrfInvalid.
+type CsrfInvalid = Problem
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 

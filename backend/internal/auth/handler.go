@@ -70,6 +70,10 @@ func (h *Handler) Login(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
+	// AUTH-009: hand the SPA the token it must echo in X-CSRF-Token.
+	if tok := h.svc.CSRFToken(c.Request.Context()); tok != "" {
+		platform.SetCSRFCookie(c.Writer, tok)
+	}
 	noStore(c)
 	c.JSON(http.StatusOK, toAPIUser(u))
 }
@@ -80,6 +84,7 @@ func (h *Handler) Logout(c *gin.Context) {
 		h.fail(c, err)
 		return
 	}
+	platform.ClearCSRFCookie(c.Writer)
 	noStore(c)
 	c.Status(http.StatusNoContent)
 }

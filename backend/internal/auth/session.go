@@ -5,16 +5,19 @@ import (
 	"time"
 
 	"github.com/alexedwards/scs/v2"
+
+	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/platform"
 )
 
 // SessionCookieName is also the name of the securityScheme in openapi.yaml.
 const SessionCookieName = "esg_session"
 
-// Session data keys. The session holds only identity; CSRF is a later ticket.
+// Session data keys: identity plus the per-session CSRF token (AUTH-009, ADR 0007).
 const (
 	keyUserID     = "userID"
 	keyEmployeeID = "employeeID"
 	keyRole       = "role"
+	keyCSRF       = platform.CSRFSessionKey // shared with the platform middleware that reads it
 )
 
 // NewSessionManager builds the scs manager (ADR 0007). The store is injected so

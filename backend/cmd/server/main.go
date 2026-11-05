@@ -83,6 +83,8 @@ func run() error {
 	if err := router.SetTrustedProxies(nil); err != nil {
 		return fmt.Errorf("trusted proxies: %w", err)
 	}
+	// AUTH-009: needs the session loaded, which sessions.LoadAndSave below guarantees.
+	router.Use(platform.CSRF(sessions, log))
 	api.RegisterHandlersWithOptions(router, srv, api.GinServerOptions{BaseURL: apiBase})
 
 	httpSrv := &http.Server{

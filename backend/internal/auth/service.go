@@ -248,6 +248,12 @@ func (s *Service) Login(ctx context.Context, employeeID, password, sourceIP stri
 	s.sessions.Put(ctx, keyUserID, row.ID)
 	s.sessions.Put(ctx, keyEmployeeID, row.EmployeeID)
 	s.sessions.Put(ctx, keyRole, row.Role)
+	// AUTH-009: a fresh per-session CSRF token on every login (the session was just renewed).
+	csrf, err := platform.NewCSRFToken()
+	if err != nil {
+		return SessionUser{}, fmt.Errorf("generate csrf token: %w", err)
+	}
+	s.sessions.Put(ctx, keyCSRF, csrf)
 
 	if err := s.audit.RecordStandalone(ctx, audit.Entry{
 		ActorEmployeeID: row.EmployeeID, ActorRole: row.Role, Action: actionLogin,
@@ -298,6 +304,12 @@ func (s *Service) recordFailedAttempt(ctx context.Context, row userRow, sourceIP
 		})
 	})
 	return alreadyLocked, err
+}
+
+// CSRFToken returns the current session's CSRF token (AUTH-009), or "" without one.
+// The handler uses it to issue the cookie after login.
+func (s *Service) CSRFToken(ctx context.Context) string {
+	return s.sessions.GetString(ctx, keyCSRF)
 }
 
 // Logout ends the caller's session (AUTH-006). Destroy deletes it from the store

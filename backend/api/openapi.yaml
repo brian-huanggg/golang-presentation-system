@@ -61,7 +61,9 @@ paths:
         while locked even the correct password is refused with the same response.
         On success the response sets the
         session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) and the session token is
-        renewed to prevent fixation.
+        renewed to prevent fixation. It also sets the readable `csrf_token` cookie
+        (`Secure`, `SameSite=Lax`, not `HttpOnly`) whose value the SPA must echo in the
+        `X-CSRF-Token` header on every later state-changing request (AUTH-009).
       tags: [auth]
       security: []
       requestBody:
@@ -90,12 +92,16 @@ paths:
       description: >
         Idempotent: a request without a live session also returns 204, so a client
         whose session already expired can still finish logging out. The session is
-        deleted from the server store before the response, and the cookie is cleared.
+        deleted from the server store before the response, and the session and
+        `csrf_token` cookies are cleared. With a live session the request must carry the
+        `X-CSRF-Token` header (AUTH-009); without one no token exists and none is checked.
       tags: [auth]
       security: []
       responses:
         "204":
           description: No live session remains
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
         default:
           $ref: "#/components/responses/Problem"
   /auth/me:
@@ -125,7 +131,24 @@ components:
       in: cookie
       name: esg_session
       description: Opaque server-side session token (HttpOnly; the SPA never reads it).
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: >
+        Per-session CSRF token, copied from the readable `csrf_token` cookie. Required on
+        every state-changing request made with a session (AUTH-009).
   responses:
+    CsrfInvalid:
+      description: >
+        The request belongs to a logged-in session but its `X-CSRF-Token` header is
+        missing or does not equal the session's token (AUTH-009). Code
+        `csrf_token_invalid`. Applies to every state-changing operation that needs a
+        session; the handler does not run.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     Problem:
       description: RFC 9457 Problem Details
       content:
