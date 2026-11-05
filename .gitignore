@@ -19,3 +19,4 @@ e2e/playwright-report/
 site/.vitepress/dist/
 site/.vitepress/cache/
 site/node_modules/
+*.tsbuildinfo

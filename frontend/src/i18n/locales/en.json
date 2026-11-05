@@ -1,0 +1,6 @@
+{
+  "app": { "title": "ESG Award", "home": "Home" },
+  "language": { "label": "Language", "zh-TW": "繁體中文", "en": "English" },
+  "error": { "unexpected": "Something went wrong.", "reload": "Reload" },
+  "notFound": "Page not found."
+}
