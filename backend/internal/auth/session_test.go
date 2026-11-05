@@ -19,9 +19,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/audit"
+	"gitlab.com/devvvv_dogg/esg-award-site-golang/backend/internal/platform"
 )
 
 const loginPassword = "S3cret-pass!"
+
+// t0 is the fixed "now" of the login tests.
+var t0 = time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC)
 
 var (
 	hashOnce  sync.Once
@@ -39,7 +43,7 @@ func storedHash(t *testing.T) string {
 	return storedPHC
 }
 
-var userCols = []string{"id", "employee_id", "full_name", "department", "role", "preferred_language", "password_hash", "must_change_password"}
+var userCols = []string{"id", "employee_id", "full_name", "department", "role", "preferred_language", "password_hash", "must_change_password", "failed_attempts", "locked_until"}
 
 // env is a router wired like production: Gin inside the scs middleware, real
 // Argon2id, real scs session logic over an in-memory store, mocked SQL.
@@ -50,6 +54,7 @@ type env struct {
 	sm    *scs.SessionManager
 	store *memstore.MemStore
 	h     http.Handler
+	clock *platform.ManualClock
 }
 
 func newEnv(t *testing.T, idle, lifetime time.Duration) *env {
@@ -62,14 +67,15 @@ func newEnv(t *testing.T, idle, lifetime time.Duration) *env {
 	store := memstore.New()
 	sm := NewSessionManager(store, idle, lifetime)
 	rec := &recorder{}
-	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), sm, rec, quiet())
+	clock := platform.NewManualClock(t0)
+	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), sm, rec, clock, quiet())
 	h := NewHandler(svc, quiet())
 
 	r := gin.New()
 	r.POST("/api/v1/auth/login", h.Login)
 	r.POST("/api/v1/auth/logout", h.Logout)
 	r.GET("/api/v1/auth/me", h.GetCurrentUser)
-	return &env{t: t, mock: mock, rec: rec, sm: sm, store: store, h: sm.LoadAndSave(r)}
+	return &env{t: t, mock: mock, rec: rec, sm: sm, store: store, h: sm.LoadAndSave(r), clock: clock}
 }
 
 func (e *env) do(method, path, body string, cookie *http.Cookie) *httptest.ResponseRecorder {
@@ -89,12 +95,12 @@ func (e *env) expectUser(role string, mustChange bool) {
 		dept = nil
 	}
 	e.mock.ExpectQuery("SELECT id, employee_id").WithArgs("123456").
-		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "王小明", dept, role, "zh-TW", storedHash(e.t), mustChange))
+		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "王小明", dept, role, "zh-TW", storedHash(e.t), mustChange, 0, nil))
 }
 
 func (e *env) expectUserByID() {
 	e.mock.ExpectQuery("SELECT id, employee_id").WithArgs(int64(7)).
-		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "王小明", "TSID", "PARTICIPANT", "zh-TW", storedHash(e.t), false))
+		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "王小明", "TSID", "PARTICIPANT", "zh-TW", storedHash(e.t), false, 0, nil))
 }
 
 func sessionCookie(t *testing.T, w *httptest.ResponseRecorder) *http.Cookie {
@@ -169,9 +175,9 @@ func TestAUTH_003_UnknownIDWrongPasswordAndMalformedIDLookIdentical(t *testing.T
 		"unknown id": {`{"employeeId":"999999","password":"whatever-Pass1!"}`, func(e *env) {
 			e.mock.ExpectQuery("SELECT id, employee_id").WithArgs("999999").WillReturnRows(sqlmock.NewRows(userCols))
 		}, "unknown_user"},
-		"wrong password": {`{"employeeId":"123456","password":"Wrong-pass-9!"}`, func(e *env) { e.expectUser("PARTICIPANT", false) }, "bad_password"},
+		"wrong password": {`{"employeeId":"123456","password":"Wrong-pass-9!"}`, func(e *env) { e.expectUser("PARTICIPANT", false); e.expectCount(0, 1) }, "bad_password"},
 		"malformed id":   {`{"employeeId":"12 456","password":"x"}`, func(*env) {}, "invalid_employee_id"},
-		"oversize pw":    {`{"employeeId":"123456","password":"` + strings.Repeat("a", 500) + `"}`, func(e *env) { e.expectUser("PARTICIPANT", false) }, "bad_password"},
+		"oversize pw":    {`{"employeeId":"123456","password":"` + strings.Repeat("a", 500) + `"}`, func(e *env) { e.expectUser("PARTICIPANT", false); e.expectCount(0, 1) }, "bad_password"},
 	}
 	var first string
 	for name, tc := range cases {
@@ -211,7 +217,7 @@ func TestAUTH_003_LoginBodyProblems(t *testing.T) {
 func TestAUTH_003_CorruptStoredHashIsAServerError(t *testing.T) {
 	e := newEnv(t, 30*time.Minute, 8*time.Hour)
 	e.mock.ExpectQuery("SELECT id, employee_id").WithArgs("123456").
-		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "x", "TSID", "PARTICIPANT", "en", "plaintext", false))
+		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "x", "TSID", "PARTICIPANT", "en", "plaintext", false, 0, nil))
 	w := e.do(http.MethodPost, "/api/v1/auth/login", `{"employeeId":"123456","password":"x"}`, nil)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.NotContains(t, w.Body.String(), "plaintext")
@@ -242,7 +248,7 @@ func rebuildWithGate(t *testing.T, e *env, gate DeadlineGate) http.Handler {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = raw.Close() })
 	e.mock = mock
-	svc := NewService(sqlx.NewDb(raw, "mysql"), gate, NewArgon2idHasher(), e.sm, e.rec, quiet())
+	svc := NewService(sqlx.NewDb(raw, "mysql"), gate, NewArgon2idHasher(), e.sm, e.rec, e.clock, quiet())
 	r := gin.New()
 	r.POST("/api/v1/auth/login", NewHandler(svc, quiet()).Login)
 	return e.sm.LoadAndSave(r)
@@ -374,9 +380,9 @@ func TestAUTH_005_LoginRenewsTheTokenBeforeStoringIdentity(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = raw.Close() })
 	ord := &orderedSessions{}
-	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), ord, &recorder{}, quiet())
+	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), ord, &recorder{}, platform.NewManualClock(t0), quiet())
 	mock.ExpectQuery("SELECT id, employee_id").WithArgs("123456").
-		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "x", "TSID", "PARTICIPANT", "en", storedHash(t), false))
+		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "x", "TSID", "PARTICIPANT", "en", storedHash(t), false, 0, nil))
 
 	_, err = svc.Login(context.Background(), "123456", loginPassword, "")
 	require.NoError(t, err)
@@ -394,9 +400,9 @@ func TestAUDIT_LoginFailsClosedWhenTheAuditWriteFails(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = raw.Close() })
 	ord := &orderedSessions{}
-	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), ord, &failingAuditor{}, quiet())
+	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), ord, &failingAuditor{}, platform.NewManualClock(t0), quiet())
 	mock.ExpectQuery("SELECT id, employee_id").WithArgs("123456").
-		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "x", "TSID", "PARTICIPANT", "en", storedHash(t), false))
+		WillReturnRows(sqlmock.NewRows(userCols).AddRow(7, "123456", "x", "TSID", "PARTICIPANT", "en", storedHash(t), false, 0, nil))
 
 	_, err = svc.Login(context.Background(), "123456", loginPassword, "")
 	require.Error(t, err)
@@ -446,7 +452,7 @@ func TestAUTH_006_LogoutSucceedsEvenIfTheAuditWriteFails(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = raw.Close() })
 	ord := &logoutSessions{}
-	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), ord, &failingAuditor{}, quiet())
+	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), ord, &failingAuditor{}, platform.NewManualClock(t0), quiet())
 	require.NoError(t, svc.Logout(context.Background(), ""))
 	assert.True(t, ord.destroyed, "invalidation does not depend on the audit trail")
 }
@@ -464,7 +470,7 @@ func TestAUTH_006_LogoutReportsAStoreFailure(t *testing.T) {
 	raw, _, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = raw.Close() })
-	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), &brokenStore{}, &recorder{}, quiet())
+	svc := NewService(sqlx.NewDb(raw, "mysql"), fakeGate{}, NewArgon2idHasher(), &brokenStore{}, &recorder{}, platform.NewManualClock(t0), quiet())
 	err = svc.Logout(context.Background(), "")
 	require.Error(t, err, "if the session could not be deleted the user must be told")
 }

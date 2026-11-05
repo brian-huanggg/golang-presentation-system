@@ -72,7 +72,7 @@ func run() error {
 	defer store.StopCleanup()
 	sessions := auth.NewSessionManager(store, cfg.SessionIdleTimeout, cfg.SessionLifetime)
 
-	authSvc := auth.NewService(db, policy, auth.NewArgon2idHasher(), sessions, recorder, log)
+	authSvc := auth.NewService(db, policy, auth.NewArgon2idHasher(), sessions, recorder, clock, log)
 	srv := server{Handler: auth.NewHandler(authSvc, log)}
 
 	gin.SetMode(gin.ReleaseMode)

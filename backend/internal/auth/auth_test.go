@@ -59,7 +59,7 @@ func newSvc(t *testing.T, gate DeadlineGate, h Hasher) (*Service, sqlmock.Sqlmoc
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = raw.Close() })
 	rec := &recorder{}
-	return NewService(sqlx.NewDb(raw, "mysql"), gate, h, nil, rec, quiet()), mock, rec
+	return NewService(sqlx.NewDb(raw, "mysql"), gate, h, nil, rec, platform.NewManualClock(time.Now()), quiet()), mock, rec
 }
 
 func validInput() RegisterInput {

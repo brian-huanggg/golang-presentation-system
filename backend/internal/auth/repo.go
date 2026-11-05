@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
@@ -51,9 +52,11 @@ type userRow struct {
 	PreferredLanguage  string         `db:"preferred_language"`
 	PasswordHash       string         `db:"password_hash"`
 	MustChangePassword bool           `db:"must_change_password"`
+	FailedAttempts     int            `db:"failed_attempts"`
+	LockedUntil        sql.NullTime   `db:"locked_until"` // UTC (DSN loc=UTC)
 }
 
-const selectUserCols = "SELECT id, employee_id, full_name, department, role, preferred_language, password_hash, must_change_password FROM `user` "
+const selectUserCols = "SELECT id, employee_id, full_name, department, role, preferred_language, password_hash, must_change_password, failed_attempts, locked_until FROM `user` "
 
 // errUserNotFound means no row matched; callers decide how much to reveal.
 var errUserNotFound = errors.New("user not found")
@@ -76,4 +79,33 @@ func findUser(ctx context.Context, q sqlx.QueryerContext, query string, arg any)
 		return userRow{}, fmt.Errorf("find user: %w", err)
 	}
 	return u, nil
+}
+
+// lockState is the lockout bookkeeping of one account (AUTH-002).
+type lockState struct {
+	FailedAttempts int          `db:"failed_attempts"`
+	LockedUntil    sql.NullTime `db:"locked_until"`
+}
+
+// lockStateForUpdate reads the counters under a row lock, so concurrent wrong
+// guesses are counted one at a time and cannot slip past the limit.
+func lockStateForUpdate(ctx context.Context, tx sqlx.QueryerContext, userID int64) (lockState, error) {
+	var st lockState
+	err := sqlx.GetContext(ctx, tx, &st, "SELECT failed_attempts, locked_until FROM `user` WHERE id = ? FOR UPDATE", userID)
+	if err != nil {
+		return lockState{}, fmt.Errorf("read lock state of user %d: %w", userID, err)
+	}
+	return st, nil
+}
+
+// saveLockState stores the counters; a zero lockedUntil clears the lock.
+func saveLockState(ctx context.Context, ex sqlx.ExecerContext, userID int64, attempts int, lockedUntil time.Time) error {
+	var until any // NULL when not locked
+	if !lockedUntil.IsZero() {
+		until = lockedUntil
+	}
+	if _, err := ex.ExecContext(ctx, "UPDATE `user` SET failed_attempts = ?, locked_until = ? WHERE id = ?", attempts, until, userID); err != nil {
+		return fmt.Errorf("save lock state of user %d: %w", userID, err)
+	}
+	return nil
 }

@@ -55,8 +55,11 @@ paths:
       description: >
         Open to visitors; allowed after the deadline (DDL-004). Email is never a login
         identifier (AUTH-001). Every credential failure (unknown ID, wrong password,
-        malformed ID) is the same 401 `invalid_credentials` so the response never
-        reveals whether an account exists (AUTH-003). On success the response sets the
+        malformed ID, locked account) is the same 401 `invalid_credentials` so the
+        response never reveals whether an account exists or is locked (AUTH-003).
+        Five consecutive wrong passwords lock the account for 5 minutes (AUTH-002);
+        while locked even the correct password is refused with the same response.
+        On success the response sets the
         session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`) and the session token is
         renewed to prevent fixation.
       tags: [auth]

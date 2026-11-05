@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -16,9 +17,17 @@ const (
 	actionRegister  = "auth.register"
 	actionLogin     = "auth.login"
 	actionLogout    = "auth.logout"
+	actionLockout   = "auth.lockout"
 	targetUser      = "user"
 	roleParticipant = "PARTICIPANT"
 	roleAdmin       = "ADMIN"
+)
+
+const (
+	// maxFailedAttempts consecutive wrong passwords lock the account for lockDuration
+	// (AUTH-002). Fixed by the PRD, so constants rather than configuration.
+	maxFailedAttempts = 5
+	lockDuration      = 5 * time.Minute
 )
 
 // DeadlineGate answers "may a participant write now?". It is defined here, at the
@@ -50,14 +59,15 @@ type Service struct {
 	hasher   Hasher
 	sessions Sessions
 	audit    Auditor
+	clock    platform.Clock
 	log      *slog.Logger
 	// dummyHash is verified against when the Employee ID is unknown, so an unknown
 	// account costs the same time as a wrong password (AUTH-003: no timing oracle).
 	dummyHash string
 }
 
-func NewService(db *sqlx.DB, gate DeadlineGate, hasher Hasher, sessions Sessions, auditor Auditor, log *slog.Logger) *Service {
-	s := &Service{db: db, gate: gate, hasher: hasher, sessions: sessions, audit: auditor, log: log}
+func NewService(db *sqlx.DB, gate DeadlineGate, hasher Hasher, sessions Sessions, auditor Auditor, clock platform.Clock, log *slog.Logger) *Service {
+	s := &Service{db: db, gate: gate, hasher: hasher, sessions: sessions, audit: auditor, clock: clock, log: log}
 	// Hashed once at startup with the current parameters. If this fails the unknown-ID
 	// path degrades to a fast mismatch; log it rather than refuse to start.
 	h, err := hasher.Hash(context.Background(), "timing-equalizer-not-a-real-password")
@@ -193,14 +203,42 @@ func (s *Service) Login(ctx context.Context, employeeID, password, sourceIP stri
 		return SessionUser{}, err
 	}
 
+	// The hash is always verified, even for a locked account, so the response time
+	// never tells a caller that the account is locked (AUTH-003).
 	ok, err := s.hasher.Verify(ctx, password, row.PasswordHash)
-	if err != nil {
+	locked := row.LockedUntil.Valid && s.clock.Now().Before(row.LockedUntil.Time)
+	if err != nil && !locked {
 		// A stored hash we cannot parse is our bug, not the caller's mistake.
 		return SessionUser{}, fmt.Errorf("verify password for user %d: %w", row.ID, err)
 	}
-	if !ok {
-		s.auditLoginFailure(ctx, id.String(), sourceIP, "bad_password")
+	if locked {
+		// Even the right password gets the generic answer while locked, and the
+		// attempt neither counts nor extends the lock.
+		if ctx.Err() != nil {
+			return SessionUser{}, ctx.Err()
+		}
+		s.auditLoginFailure(ctx, id.String(), sourceIP, "account_locked")
 		return SessionUser{}, ErrInvalidCredentials()
+	}
+	if !ok {
+		reason := "bad_password"
+		wasLocked, err := s.recordFailedAttempt(ctx, row, sourceIP)
+		if err != nil {
+			return SessionUser{}, err
+		}
+		if wasLocked { // a concurrent request locked it between our read and now
+			reason = "account_locked"
+		}
+		s.auditLoginFailure(ctx, id.String(), sourceIP, reason)
+		return SessionUser{}, ErrInvalidCredentials()
+	}
+
+	// "Consecutive" failures: a success starts the count over. Skipped when there is
+	// nothing to clear, so ordinary logins do not write.
+	if row.FailedAttempts > 0 || row.LockedUntil.Valid {
+		if err := saveLockState(ctx, s.db, row.ID, 0, time.Time{}); err != nil {
+			return SessionUser{}, err
+		}
 	}
 
 	// Fixation defence: a new token (and a fresh 8 h deadline) for the authenticated session.
@@ -223,6 +261,43 @@ func (s *Service) Login(ctx context.Context, employeeID, password, sourceIP stri
 		return SessionUser{}, fmt.Errorf("audit login: %w", err)
 	}
 	return toSessionUser(row), nil
+}
+
+// recordFailedAttempt counts one wrong password and, on the maxFailedAttempts-th,
+// locks the account and audits the lockout (AUD-001) in the same transaction. The
+// row lock serialises concurrent guesses. When the lock was already set by a
+// concurrent request it changes nothing and reports alreadyLocked. The counter
+// restarts from zero at lock time, so an expired lock needs no separate reset.
+func (s *Service) recordFailedAttempt(ctx context.Context, row userRow, sourceIP string) (alreadyLocked bool, err error) {
+	err = platform.WithTx(ctx, s.db, func(tx *sqlx.Tx) error {
+		st, err := lockStateForUpdate(ctx, tx, row.ID)
+		if err != nil {
+			return err
+		}
+		now := s.clock.Now()
+		if st.LockedUntil.Valid && now.Before(st.LockedUntil.Time) {
+			alreadyLocked = true
+			return nil
+		}
+		attempts := st.FailedAttempts + 1
+		if attempts < maxFailedAttempts {
+			return saveLockState(ctx, tx, row.ID, attempts, time.Time{})
+		}
+		until := now.Add(lockDuration)
+		if err := saveLockState(ctx, tx, row.ID, 0, until); err != nil {
+			return err
+		}
+		return s.audit.Record(ctx, tx, audit.Entry{
+			// No actor: the lock is applied by the system, not by the account holder.
+			Action:     actionLockout,
+			TargetType: targetUser, TargetID: row.EmployeeID,
+			Result: audit.ResultSuccess, SourceIP: sourceIP,
+			Changes: map[string]any{"after": map[string]any{
+				"failedAttempts": maxFailedAttempts, "lockedUntil": until.Format(time.RFC3339),
+			}},
+		})
+	})
+	return alreadyLocked, err
 }
 
 // Logout ends the caller's session (AUTH-006). Destroy deletes it from the store
