@@ -31,7 +31,8 @@ export default defineConfig({
           { text: 'Admin Vault Seed 與強制改密碼', link: '/vault-admin-seed' },
           { text: 'hashpw 雜湊工具', link: '/hashpw' },
           { text: '建立團隊 all-or-nothing', link: '/create-team' },
-          { text: '組長加入與移除成員', link: '/team-members' }
+          { text: '組長加入與移除成員', link: '/team-members' },
+          { text: '成員離隊與組長不得離隊', link: '/leave-team' }
         ]
       }
     ],
